@@ -1,0 +1,7 @@
+# Build artifacts
+build
+*.o
+*.out
+
+# Other files
+TODO
