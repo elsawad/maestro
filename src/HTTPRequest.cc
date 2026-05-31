@@ -12,6 +12,7 @@
 
 #include "ABNF.h"
 #include "HTTPRequest.h"
+#include "TokenParser.h"
 
 const std::unordered_map<std::string, HTTPMethod> method_map{{
   {"GET", HTTPMethod::GET},
