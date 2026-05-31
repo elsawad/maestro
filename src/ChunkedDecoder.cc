@@ -46,10 +46,11 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
       case State::READING_CHUNK_EXT:
       case State::READING_LAST_CHUNK_EXT: {
         // We will ignore chunk extensions here since they are optional and not commonly used, but we will still need to read until the CRLF at the end of the chunk size line
-        const auto extensions_start{span.begin() + pos};
-        auto extensions_end = std::find(extensions_start, span.end(), std::byte{'\r'});
-        pos += std::distance(extensions_start, extensions_end);
-        if (extensions_end == span.end()) {
+        while (pos < span.size() && span[pos] != std::byte{'\r'}) {
+          ++pos;
+        }
+
+        if (pos == span.size()) {
           // No CRLF found, wait for more data
           return {this->status, span.last(0)};
         }
@@ -186,7 +187,7 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
   return {this->status, span.subspan(pos)};
 }
 
-ChunkedDecoder::DefaultHandler ChunkedDecoder::default_handler{};
+ChunkedDecoder::Handler ChunkedDecoder::default_handler{};
 
 void ChunkedDecoder::set_handler(Handler & handler) {
   this->handler = &handler;

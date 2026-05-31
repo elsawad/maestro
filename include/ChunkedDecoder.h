@@ -46,8 +46,7 @@ class ChunkedDecoder: public StreamProcessor {
     };
     State state = State::READING_CHUNK_SIZE;
 
-    class DefaultHandler: public Handler {};
-    static DefaultHandler default_handler;
+    static Handler default_handler;
     Handler * handler{&default_handler};
 
     Chunk partial_chunk;
