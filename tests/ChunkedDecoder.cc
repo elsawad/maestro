@@ -47,6 +47,10 @@ class ChunkedDecoderTest: public ::testing::Test {
 
 TEST_F(ChunkedDecoderTest, NoInput) {
   EXPECT_EQ(decoder.get_status(), ChunkedDecoder::Status::IN_PROGRESS);
+  EXPECT_TRUE(handler.chunks.empty());
+  EXPECT_TRUE(handler.trailer_section.empty());
+  EXPECT_FALSE(handler.error);
+  EXPECT_FALSE(handler.finished);
 };
 
 TEST_F(ChunkedDecoderTest, EmptyInput) {
@@ -136,11 +140,14 @@ TEST_F(ChunkedDecoderTest, SplitEmptyData) {
   EXPECT_EQ(result.status, ChunkedDecoder::Status::IN_PROGRESS);
   EXPECT_TRUE(result.remaining.empty());
   EXPECT_TRUE(handler.chunks.empty());
+  EXPECT_FALSE(handler.finished);
+  EXPECT_FALSE(handler.error);
 
   std::vector<std::byte> input2{"\n\r\n"_b};
   result = decoder.feed(input2);
   EXPECT_EQ(result.status, ChunkedDecoder::Status::DONE);
   EXPECT_TRUE(result.remaining.empty());
+
   ASSERT_EQ(handler.chunks.size(), 1);
   const Chunk * const chunk{&handler.chunks[0]};
   EXPECT_TRUE(chunk->data.empty());
@@ -238,4 +245,30 @@ TEST_F(ChunkedDecoderTest, StrangeBodyCharacters) {
   const Chunk * const chunk2{&handler.chunks[1]};
   EXPECT_TRUE(chunk2->data.empty());
   EXPECT_TRUE(chunk2->extensions.empty());
+}
+
+TEST_F(ChunkedDecoderTest, SplitChunkSize) {
+  std::vector<std::byte> input1{"1"_b};
+  ChunkedDecoder::FeedResult result1{decoder.feed(input1)};
+  EXPECT_EQ(result1.status, ChunkedDecoder::Status::IN_PROGRESS);
+  EXPECT_TRUE(result1.remaining.empty());
+  EXPECT_TRUE(handler.chunks.empty());
+  EXPECT_FALSE(handler.error);
+  EXPECT_FALSE(handler.finished);
+
+  std::vector<std::byte> input2{"0\r\nabcdefghijklmnop\r\n0\r\n\r\n"_b};
+  ChunkedDecoder::FeedResult result2{decoder.feed(input2)};
+  EXPECT_EQ(result2.status, ChunkedDecoder::Status::DONE);
+  EXPECT_TRUE(result2.remaining.empty());
+  EXPECT_FALSE(handler.error);
+  EXPECT_TRUE(handler.finished);
+
+  ASSERT_EQ(handler.chunks.size(), 2);
+  const Chunk * const chunk1{&handler.chunks[0]};
+  EXPECT_EQ(chunk1->data, "abcdefghijklmnop"_b);
+  EXPECT_TRUE(chunk1->extensions.empty());
+
+  const Chunk * const chunk2{&handler.chunks[1]};
+  EXPECT_EQ(chunk2->data, ""_b);
+  EXPECT_TRUE(chunk1->extensions.empty());
 }

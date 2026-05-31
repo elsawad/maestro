@@ -12,13 +12,14 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
   while (pos < span.size() && this->status == Status::IN_PROGRESS) {
     switch(this->state) {
       case State::READING_CHUNK_SIZE: {
-        const auto chunkSizeStart{span.begin() + pos};
-        const auto chunkSizeEnd{std::find_if(chunkSizeStart, span.end(), [](std::byte c) { return !HEXDIG.contains(static_cast<std::uint8_t>(c)); })};
-        this->buffer.insert(this->buffer.cend(), chunkSizeStart, chunkSizeEnd);
+        while (pos < span.size() && HEXDIG.contains(static_cast<std::uint8_t>(span[pos]))) {
+          this->buffer.push_back(span[pos]);
+          ++pos;
+        }
 
-        if (chunkSizeEnd == span.end()) {
+        if (pos == span.size()) {
           // No non-HEXDIG character found, wait for more data
-          return {this->status, span.subspan(pos)};
+          return {this->status, span.last(0)};
         }
 
         // We found a non-HEXDIG character, so everything before this character is the chunk size in hexadecimal
@@ -32,7 +33,6 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
         const std::string current_chunk_size_str{reinterpret_cast<const char *>(this->buffer.data()), this->buffer.size()};
         this->buffer.clear();
         this->current_chunk_size = std::stoull(current_chunk_size_str, nullptr, 16);
-        pos += this->current_chunk_size / 16 + 1;
 
         if (this->current_chunk_size == 0) {
           this->state = State::READING_LAST_CHUNK_EXT;
@@ -51,7 +51,7 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
         pos += std::distance(extensions_start, extensions_end);
         if (extensions_end == span.end()) {
           // No CRLF found, wait for more data
-          return {this->status, span.subspan(pos)};
+          return {this->status, span.last(0)};
         }
 
         this->state =
@@ -119,7 +119,7 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
           this->handler->on_data(new_data);
           this->partial_chunk.data.insert(this->partial_chunk.data.end(), new_data.begin(), new_data.end());
           this->current_chunk_size -= bytes_available;
-          return {this->status, span.subspan(pos)};
+          return {this->status, span.last(0)};
         }
 
         const auto new_data = std::vector<std::byte>{cur, cur + this->current_chunk_size};
@@ -147,7 +147,7 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
 
         switch (status) {
           case FieldCollectionParser::Status::IN_PROGRESS: {
-            return {this->status, span.subspan(pos)};
+            return {this->status, span.last(0)};
           }
 
           case FieldCollectionParser::Status::DONE: {
