@@ -17,7 +17,7 @@ class ChunkedDecoder: public StreamProcessor {
     struct Handler {
       virtual ~Handler() = default;
       virtual void on_chunk(Chunk && chunk);
-      virtual void on_data(const std::vector<std::byte> & data);
+      virtual void on_data(std::span<const std::byte> data);
       virtual void on_error();
       virtual void on_finish();
       virtual void on_trailer_section(FieldCollection && trailer_section);

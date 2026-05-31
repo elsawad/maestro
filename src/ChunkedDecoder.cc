@@ -113,17 +113,21 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
       }
 
       case State::READING_CHUNK_DATA: {
-        const auto cur = span.begin() + pos;
-        const std::ptrdiff_t bytes_available = std::distance(cur, span.end());
+        const std::size_t bytes_available = span.size() - pos;
+
+        if (bytes_available == 0) {
+          return {this->status, span.last(0)};
+        }
+
         if (bytes_available < this->current_chunk_size) {
-          const auto new_data = std::vector<std::byte>{cur, span.end()};
+          const auto new_data = span.subspan(pos);
           this->handler->on_data(new_data);
           this->partial_chunk.data.insert(this->partial_chunk.data.end(), new_data.begin(), new_data.end());
           this->current_chunk_size -= bytes_available;
           return {this->status, span.last(0)};
         }
 
-        const auto new_data = std::vector<std::byte>{cur, cur + this->current_chunk_size};
+        const auto new_data = span.subspan(pos, this->current_chunk_size);
         this->handler->on_data(new_data);
         this->partial_chunk.data.insert(this->partial_chunk.data.end(), new_data.begin(), new_data.end());
         pos += this->current_chunk_size;
@@ -197,7 +201,7 @@ void ChunkedDecoder::unset_handler() {
   this->handler = &this->default_handler;
 }
 
-void ChunkedDecoder::Handler::on_data(const std::vector<std::byte> & data) {
+void ChunkedDecoder::Handler::on_data(std::span<const std::byte> data) {
   // Default implementation does nothing
 }
 

@@ -19,7 +19,7 @@ void ChunkedDecoderSink::finish() {
   this->byte_sink->finish();
 }
 
-void ChunkedDecoderSink::on_data(const std::vector<std::byte> & data) {
+void ChunkedDecoderSink::on_data(std::span<const std::byte> data) {
   this->byte_sink->write(data.data(), data.size());
 }
 
