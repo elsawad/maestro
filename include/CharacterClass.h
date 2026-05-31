@@ -12,7 +12,7 @@ class CharacterClass {
     CharacterClass(std::initializer_list<std::uint8_t> chars);
     bool contains(std::uint8_t c) const;
   private:
-    std::array<bool, NUM_BYTES> bytes;
+    std::array<bool, NUM_BYTES> bytes{};
 };
 
 #endif
