@@ -157,6 +157,14 @@ TEST_F(ChunkedDecoderTest, SplitEmptyData) {
   EXPECT_FALSE(handler.error);
 }
 
+TEST_F(ChunkedDecoderTest, ExtraData) {
+  std::vector<std::byte> input{"0\r\n\r\nthis should not be read by the decoder"_b};
+  ChunkedDecoder::FeedResult result{decoder.feed(input)};
+  EXPECT_EQ(result.status, ChunkedDecoder::Status::DONE);
+  const auto expected_remaining{"this should not be read by the decoder"_b};
+  EXPECT_TRUE(std::equal(result.remaining.begin(), result.remaining.end(), expected_remaining.cbegin(), expected_remaining.cend()));
+}
+
 TEST_F(ChunkedDecoderTest, SingleChunk) {
   std::vector<std::byte> input{"4\r\nWiki\r\n0\r\n\r\n"_b};
   ChunkedDecoder::FeedResult result{decoder.feed(input)};
@@ -271,4 +279,63 @@ TEST_F(ChunkedDecoderTest, SplitChunkSize) {
   const Chunk * const chunk2{&handler.chunks[1]};
   EXPECT_EQ(chunk2->data, ""_b);
   EXPECT_TRUE(chunk1->extensions.empty());
+}
+
+TEST_F(ChunkedDecoderTest, SplitChunkBody) {
+  std::vector<std::byte> input1{"2\r\n0"_b};
+  ChunkedDecoder::FeedResult result1{decoder.feed(input1)};
+  EXPECT_EQ(result1.status, ChunkedDecoder::Status::IN_PROGRESS);
+  EXPECT_TRUE(result1.remaining.empty());
+  EXPECT_FALSE(handler.error);
+  EXPECT_FALSE(handler.finished);
+  EXPECT_TRUE(handler.chunks.empty());
+
+  std::vector<std::byte> input2{"1\r\n0\r\n\r\n"_b};
+  ChunkedDecoder::FeedResult result2{decoder.feed(input2)};
+  EXPECT_EQ(result2.status, ChunkedDecoder::Status::DONE);
+  EXPECT_TRUE(result2.remaining.empty());
+  EXPECT_FALSE(handler.error);
+  EXPECT_TRUE(handler.finished);
+
+  ASSERT_EQ(handler.chunks.size(), 2);
+  const Chunk * const chunk1{&handler.chunks[0]};
+  EXPECT_EQ(chunk1->data, "01"_b);
+  EXPECT_TRUE(chunk1->extensions.empty());
+
+  const Chunk * const chunk2{&handler.chunks[1]};
+  EXPECT_TRUE(chunk2->data.empty());
+  EXPECT_TRUE(chunk2->extensions.empty());
+}
+
+TEST_F(ChunkedDecoderTest, SplitChunkBodyWithEmptyFeed) {
+  std::vector<std::byte> input1{"2\r\n0"_b};
+  ChunkedDecoder::FeedResult result1{decoder.feed(input1)};
+  EXPECT_EQ(result1.status, ChunkedDecoder::Status::IN_PROGRESS);
+  EXPECT_TRUE(result1.remaining.empty());
+  EXPECT_FALSE(handler.error);
+  EXPECT_FALSE(handler.finished);
+  EXPECT_TRUE(handler.chunks.empty());
+
+  std::vector<std::byte> input2{""_b};
+  ChunkedDecoder::FeedResult result2{decoder.feed(input2)};
+  EXPECT_EQ(result2.status, ChunkedDecoder::Status::IN_PROGRESS);
+  EXPECT_TRUE(result2.remaining.empty());
+  EXPECT_FALSE(handler.error);
+  EXPECT_FALSE(handler.finished);
+
+  std::vector<std::byte> input3{"1\r\n0\r\n\r\n"_b};
+  ChunkedDecoder::FeedResult result3{decoder.feed(input3)};
+  EXPECT_EQ(result3.status, ChunkedDecoder::Status::DONE);
+  EXPECT_TRUE(result3.remaining.empty());
+  EXPECT_FALSE(handler.error);
+  EXPECT_TRUE(handler.finished);
+
+  ASSERT_EQ(handler.chunks.size(), 2);
+  const Chunk * const chunk1{&handler.chunks[0]};
+  EXPECT_EQ(chunk1->data, "01"_b);
+  EXPECT_TRUE(chunk1->extensions.empty());
+
+  const Chunk * const chunk2{&handler.chunks[1]};
+  EXPECT_TRUE(chunk2->data.empty());
+  EXPECT_TRUE(chunk2->extensions.empty());
 }
