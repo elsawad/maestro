@@ -28,6 +28,7 @@ target_sources(maestro
     src/HTTPRequest.cc
     src/HTTPResponse.cc
     src/Options.cc
+    src/QuotedStringParser.cc
     src/Server.cc
     src/StreamProcessor.cc
     src/TokenParser.cc
