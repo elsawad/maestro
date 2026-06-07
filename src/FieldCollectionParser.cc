@@ -20,7 +20,7 @@ FieldCollectionParser::FeedResult FieldCollectionParser::feed(std::span<const st
         }
 
         std::uint8_t c;
-        while (pos < span.size() && TCHAR.contains(c = static_cast<std::uint8_t>(span[pos]))) {
+        while (pos < span.size() && tchar.contains(c = static_cast<std::uint8_t>(span[pos]))) {
           this->field_name.push_back(c);
           ++pos;
         }

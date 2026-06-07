@@ -217,7 +217,7 @@ void HTTPRequest::append(const std::vector<uint8_t> & chunk) {
       while (crlf != input.cend() && crlf != line_start) {
         // A header line is in the format "field-name: OWS field-value OWS", where OWS is optional whitespace (spaces or tabs)
         // A field-name is a token, which is just a string of 1 or more TCHARs
-        const auto colon(std::find_if(line_start, crlf, [](char c) { return TCHAR.contains(c); }));
+        const auto colon(std::find_if(line_start, crlf, [](char c) { return tchar.contains(c); }));
         if (colon == crlf or *colon != ':') {
           // No colon found, invalid header line
           this->state = HTTPRequestState::INVALID;

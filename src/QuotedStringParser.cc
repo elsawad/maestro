@@ -1,5 +1,3 @@
-#include <stdexcept>
-
 #include "CharacterClass.h"
 #include "QuotedStringParser.h"
 
@@ -33,7 +31,7 @@ FeedResult QuotedStringParser::feed(std::string_view sv) {
           ++i;
           this->state = QuotedStringParserState::DONE;
         } else if (qdtext.contains(sv[i])) {
-          this->str += sv[i];
+          this->str.push_back(sv[i]);
           ++i;
         } else {
           this->state = QuotedStringParserState::INVALID;
@@ -48,7 +46,7 @@ FeedResult QuotedStringParser::feed(std::string_view sv) {
           return {FeedState::ERROR, i};
         }
 
-        this->str += sv[i];
+        this->str.push_back(sv[i]);
         ++i;
 
         this->state = QuotedStringParserState::READING_QDTEXT;

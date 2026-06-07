@@ -10,6 +10,7 @@ add_executable(tests
   BasicOstreamSink.cc
   ChunkedDecoder.cc
   ChunkedEncoder.cc
+  TokenParser.cc
   QuotedStringParser.cc
 )
 
