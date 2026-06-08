@@ -35,41 +35,30 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
         this->buffer.clear();
         this->current_chunk_size = std::stoull(current_chunk_size_str, nullptr, 16);
 
-        if (this->current_chunk_size == 0) {
-          this->state = State::READING_LAST_CHUNK_EXT;
-        } else {
-          this->state = State::READING_CHUNK_EXT;
-        }
-
+        this->is_last_chunk = this->current_chunk_size == 0;
+        this->state = State::READING_CHUNK_EXT;
         break;
       }
 
-      case State::READING_CHUNK_EXT:
-      case State::READING_LAST_CHUNK_EXT: {
+      case State::READING_CHUNK_EXT: {
         if (span[pos] == std::byte{'\r'}) {
           // No chunk extension, we expect to see a CRLF immediately after the chunk size
           ++pos;
-          this->state =
-              this->state == State::READING_CHUNK_EXT ? State::READING_CHUNK_SIZE_LF
-            : State::READING_LAST_CHUNK_LF;
+          this->state = State::READING_CHUNK_SIZE_LF;
           break;
         }
 
         if (WSP.contains(span[pos])) {
           // There is a chunk extension and it begins with BWS
           ++pos;
-          this->state =
-              this->state == State::READING_CHUNK_EXT ? State::READING_CHUNK_EXT_SEMICOLON_BWS
-            : State::READING_LAST_CHUNK_EXT_SEMICOLON_BWS;
+          this->state = State::READING_CHUNK_EXT_SEMICOLON_BWS;
           break;
         }
 
         if (span[pos] == std::byte{';'}) {
           // There is a chunk extension and it begins with a semicolon
           ++pos;
-          this->state =
-              this->state == State::READING_CHUNK_EXT ? State::READING_CHUNK_EXT_NAME_BWS
-            : State::READING_LAST_CHUNK_EXT_NAME_BWS;
+          this->state = State::READING_CHUNK_EXT_NAME_BWS;
           break;
         }
 
@@ -81,11 +70,7 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
       case State::READING_CHUNK_EXT_SEMICOLON_BWS:
       case State::READING_CHUNK_EXT_NAME_BWS:
       case State::READING_CHUNK_EXT_REST_BWS:
-      case State::READING_CHUNK_EXT_VAL_BWS:
-      case State::READING_LAST_CHUNK_EXT_SEMICOLON_BWS:
-      case State::READING_LAST_CHUNK_EXT_NAME_BWS:
-      case State::READING_LAST_CHUNK_EXT_REST_BWS:
-      case State::READING_LAST_CHUNK_EXT_VAL_BWS: {
+      case State::READING_CHUNK_EXT_VAL_BWS: {
         while (pos < span.size() && WSP.contains(span[pos])) {
           ++pos;
         }
@@ -99,16 +84,11 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
             this->state == State::READING_CHUNK_EXT_SEMICOLON_BWS ? State::READING_CHUNK_EXT_SEMICOLON
           : this->state == State::READING_CHUNK_EXT_NAME_BWS ? State::READING_CHUNK_EXT_NAME
           : this->state == State::READING_CHUNK_EXT_REST_BWS ? State::READING_CHUNK_EXT_REST
-          : this->state == State::READING_CHUNK_EXT_VAL_BWS ? State::READING_CHUNK_EXT_VAL
-          : this->state == State::READING_LAST_CHUNK_EXT_SEMICOLON_BWS ? State::READING_LAST_CHUNK_EXT_SEMICOLON
-          : this->state == State::READING_LAST_CHUNK_EXT_NAME_BWS ? State::READING_LAST_CHUNK_EXT_NAME
-          : this->state == State::READING_LAST_CHUNK_EXT_REST_BWS ? State::READING_LAST_CHUNK_EXT_REST
-          : State::READING_LAST_CHUNK_EXT_VAL;
+          : State::READING_CHUNK_EXT_VAL;
         break;
       }
 
-      case State::READING_CHUNK_EXT_SEMICOLON:
-      case State::READING_LAST_CHUNK_EXT_SEMICOLON: {
+      case State::READING_CHUNK_EXT_SEMICOLON: {
         if (span[pos] != std::byte{';'}) {
           this->state = State::INVALID;
           this->handler->on_error();
@@ -116,14 +96,11 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
         }
 
         ++pos;
-        this->state =
-            this->state == State::READING_CHUNK_EXT_SEMICOLON ? State::READING_CHUNK_EXT_NAME_BWS
-          : State::READING_LAST_CHUNK_EXT_NAME_BWS;
+        this->state = State::READING_CHUNK_EXT_NAME_BWS;
         break;
       }
 
-      case State::READING_CHUNK_EXT_NAME:
-      case State::READING_LAST_CHUNK_EXT_NAME: {
+      case State::READING_CHUNK_EXT_NAME: {
         if (!this->chunk_ext_name_parser.has_value()) {
           this->chunk_ext_name_parser.emplace();
         }
@@ -141,14 +118,11 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
         }
 
         pos += consumed;
-        this->state =
-            this->state == State::READING_CHUNK_EXT_NAME ? State::READING_CHUNK_EXT_REST_BWS
-          : State::READING_LAST_CHUNK_EXT_REST_BWS;
+        this->state = State::READING_CHUNK_EXT_REST_BWS;
         break;
       }
 
-      case State::READING_CHUNK_EXT_REST:
-      case State::READING_LAST_CHUNK_EXT_REST: {
+      case State::READING_CHUNK_EXT_REST: {
         if (span[pos] == std::byte{';'}) {
           // No extension value and extensions continue
           const std::string chunk_ext_name{*this->chunk_ext_name_parser->value()};
@@ -157,18 +131,14 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
           this->partial_chunk.extensions.emplace_back(chunk_ext_name, std::nullopt);
 
           ++pos;
-          this->state =
-              this->state == State::READING_CHUNK_EXT_REST ? State::READING_CHUNK_EXT_NAME_BWS
-            : State::READING_LAST_CHUNK_EXT_NAME_BWS;
+          this->state = State::READING_CHUNK_EXT_NAME_BWS;
           break;
         }
 
         if (span[pos] == std::byte{'='}) {
           // There is an extension value
           ++pos;
-          this->state =
-              this->state == State::READING_CHUNK_EXT_REST ? State::READING_CHUNK_EXT_VAL_BWS
-            : State::READING_LAST_CHUNK_EXT_VAL_BWS;
+          this->state = State::READING_CHUNK_EXT_VAL_BWS;
           break;
         }
 
@@ -180,9 +150,7 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
           this->partial_chunk.extensions.emplace_back(chunk_ext_name, std::nullopt);
 
           ++pos;
-          this->state =
-              this->state == State::READING_CHUNK_EXT_REST_BWS ? State::READING_CHUNK_SIZE_LF
-            : State::READING_LAST_CHUNK_LF;
+          this->state = State::READING_CHUNK_SIZE_LF;
           break;
         }
 
@@ -191,8 +159,7 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
         break;
       }
 
-      case State::READING_CHUNK_EXT_VAL:
-      case State::READING_LAST_CHUNK_EXT_VAL: {
+      case State::READING_CHUNK_EXT_VAL: {
         if (!this->chunk_ext_val_parser.has_value() && tchar.contains(span[pos])) {
           this->chunk_ext_val_parser.emplace(std::in_place_type<TokenParser>);
         } else if (!this->chunk_ext_val_parser.has_value() && span[pos] == std::byte{'"'}) {
@@ -231,9 +198,7 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
         this->partial_chunk.extensions.emplace_back(chunk_ext_name, chunk_ext_val);
 
         pos += consumed;
-        this->state =
-            this->state == State::READING_CHUNK_EXT_VAL ? State::READING_CHUNK_EXT
-          : State::READING_LAST_CHUNK_EXT;
+        this->state = State::READING_CHUNK_EXT;
         break;
       }
 
@@ -254,7 +219,6 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
 
       case State::READING_CHUNK_SIZE_LF:
       case State::READING_CHUNK_DATA_LF:
-      case State::READING_LAST_CHUNK_LF:
       case State::READING_CHUNKED_BODY_LF: {
         if (span[pos] != std::byte{'\n'}) {
           this->state = State::INVALID;
@@ -262,19 +226,19 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
           break;
         }
 
-        if (this->state == State::READING_CHUNK_DATA_LF || this->state == State::READING_LAST_CHUNK_LF) {
+        if ((this->state == State::READING_CHUNK_DATA_LF && !this->is_last_chunk) || (this->state == State::READING_CHUNK_SIZE_LF && this->is_last_chunk)) {
           this->handler->on_chunk(std::move(this->partial_chunk));
         }
 
-        if (this->state == State::READING_CHUNK_DATA_LF) {
+        if (this->state == State::READING_CHUNK_DATA_LF && !this->is_last_chunk) {
           this->partial_chunk = Chunk{};
         }
 
         ++pos;
         this->state =
-            this->state == State::READING_CHUNK_SIZE_LF ? State::READING_CHUNK_DATA
+            this->state == State::READING_CHUNK_SIZE_LF && this->is_last_chunk ? State::READING_TRAILER_SECTION
+          : this->state == State::READING_CHUNK_SIZE_LF && !this->is_last_chunk ? State::READING_CHUNK_DATA
           : this->state == State::READING_CHUNK_DATA_LF ? State::READING_CHUNK_SIZE
-          : this->state == State::READING_LAST_CHUNK_LF ? State::READING_TRAILER_SECTION
           : State::DONE;
 
         if (this->state == State::DONE) {
