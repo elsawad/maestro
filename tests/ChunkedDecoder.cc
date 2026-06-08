@@ -249,6 +249,63 @@ TEST_F(ChunkedDecoderTest, ChunkDataStartAfterExtSemicolon) {
   EXPECT_EQ(handler.on_error_call_count, 1);
 }
 
+TEST_F(ChunkedDecoderTest, ChunkDataStartAfterExtName) {
+  const std::vector<std::byte> input{"0;ext\r\n\r\n"_b};
+  ChunkedDecoder::FeedResult result{decoder.feed(input)};
+  EXPECT_EQ(result.status, ChunkedDecoder::Status::DONE);
+  EXPECT_TRUE(result.remaining.empty());
+
+  ASSERT_EQ(handler.chunks.size(), 1);
+  ASSERT_EQ(handler.chunks[0].extensions.size(), 1);
+  EXPECT_EQ(handler.chunks[0].extensions[0].name, "ext");
+  EXPECT_EQ(handler.chunks[0].extensions[0].val, std::nullopt);
+
+  EXPECT_EQ(handler.on_finish_call_count, 1);
+  EXPECT_EQ(handler.on_error_call_count, 0);
+}
+
+TEST_F(ChunkedDecoderTest, NoValueExtensionThenValueExtension) {
+  const std::vector<std::byte> input{"0;ext1;ext2=\"val2\"\r\n\r\n"_b};
+  ChunkedDecoder::FeedResult result{decoder.feed(input)};
+  EXPECT_EQ(result.status, ChunkedDecoder::Status::DONE);
+  EXPECT_TRUE(result.remaining.empty());
+
+  ASSERT_EQ(handler.chunks.size(), 1);
+  const Chunk * const chunk{&handler.chunks[0]};
+  EXPECT_TRUE(chunk->data.empty());
+
+  ASSERT_EQ(handler.chunks[0].extensions.size(), 2);
+
+  const ChunkExtension * const ext1{&chunk->extensions[0]};
+  EXPECT_EQ(ext1->name, "ext1");
+  EXPECT_EQ(ext1->val, std::nullopt);
+
+  const ChunkExtension * const ext2{&chunk->extensions[1]};
+  EXPECT_EQ(ext2->name, "ext2");
+  EXPECT_EQ(ext2->val, "val2");
+}
+
+TEST_F(ChunkedDecoderTest, TwoNoValueExtensions) {
+  const std::vector<std::byte> input{"0;ext1;ext2\r\n\r\n"_b};
+  ChunkedDecoder::FeedResult result{decoder.feed(input)};
+  EXPECT_EQ(result.status, ChunkedDecoder::Status::DONE);
+  EXPECT_TRUE(result.remaining.empty());
+
+  ASSERT_EQ(handler.chunks.size(), 1);
+  const Chunk * const chunk{&handler.chunks[0]};
+  EXPECT_TRUE(chunk->data.empty());
+
+  ASSERT_EQ(handler.chunks[0].extensions.size(), 2);
+
+  const ChunkExtension * const ext1{&chunk->extensions[0]};
+  EXPECT_EQ(ext1->name, "ext1");
+  EXPECT_EQ(ext1->val, std::nullopt);
+
+  const ChunkExtension * const ext2{&chunk->extensions[1]};
+  EXPECT_EQ(ext2->name, "ext2");
+  EXPECT_EQ(ext2->val, std::nullopt);
+}
+
 TEST_F(ChunkedDecoderTest, ChunkDataStartAfterExtEquals) {
   const std::vector<std::byte> input{"0;ext=\r\n\r\n"_b};
   ChunkedDecoder::FeedResult result{decoder.feed(input)};
