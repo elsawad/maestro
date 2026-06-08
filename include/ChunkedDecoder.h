@@ -3,12 +3,15 @@
 
 #include <cstdint>
 #include <list>
+#include <variant>
 #include <vector>
 
 #include "Chunk.h"
 #include "FieldCollection.h"
 #include "FieldCollectionParser.h"
+#include "QuotedStringParser.h"
 #include "StreamProcessor.h"
+#include "TokenParser.h"
 
 class ChunkedDecoder: public StreamProcessor {
   public:
@@ -30,12 +33,30 @@ class ChunkedDecoder: public StreamProcessor {
     enum class State {
       READING_CHUNK_SIZE,
       READING_CHUNK_EXT,
+      READING_CHUNK_EXT_SEMICOLON_BWS,
+      READING_CHUNK_EXT_SEMICOLON,
+      READING_CHUNK_EXT_NAME_BWS,
+      READING_CHUNK_EXT_NAME,
+      READING_CHUNK_EXT_REST,
+      READING_CHUNK_EXT_EQUALS_BWS,
+      READING_CHUNK_EXT_EQUALS,
+      READING_CHUNK_EXT_VAL_BWS,
+      READING_CHUNK_EXT_VAL,
       READING_CHUNK_SIZE_CR,
       READING_CHUNK_SIZE_LF,
       READING_CHUNK_DATA,
       READING_CHUNK_DATA_CR,
       READING_CHUNK_DATA_LF,
       READING_LAST_CHUNK_EXT,
+      READING_LAST_CHUNK_EXT_SEMICOLON_BWS,
+      READING_LAST_CHUNK_EXT_SEMICOLON,
+      READING_LAST_CHUNK_EXT_NAME_BWS,
+      READING_LAST_CHUNK_EXT_NAME,
+      READING_LAST_CHUNK_EXT_REST,
+      READING_LAST_CHUNK_EXT_EQUALS_BWS,
+      READING_LAST_CHUNK_EXT_EQUALS,
+      READING_LAST_CHUNK_EXT_VAL_BWS,
+      READING_LAST_CHUNK_EXT_VAL,
       READING_LAST_CHUNK_CR,
       READING_LAST_CHUNK_LF,
       READING_TRAILER_SECTION,
@@ -53,6 +74,9 @@ class ChunkedDecoder: public StreamProcessor {
 
     std::vector<std::byte> buffer;
     std::size_t current_chunk_size = 0;
+
+    std::optional<TokenParser> chunk_ext_name_parser;
+    std::optional<std::variant<TokenParser, QuotedStringParser>> chunk_ext_val_parser;
 
     std::optional<FieldCollectionParser> field_collection_parser;
 };

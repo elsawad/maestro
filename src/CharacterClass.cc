@@ -20,6 +20,10 @@ CharacterClass::CharacterClass(std::initializer_list<std::uint8_t> chars) {
   }
 }
 
-bool CharacterClass::contains(std::uint8_t c) const {
+bool CharacterClass::contains(std::byte c) const noexcept {
+  return this->bytes[std::to_integer<std::size_t>(c)];
+}
+
+bool CharacterClass::contains(std::uint8_t c) const noexcept {
   return this->bytes[c];
 }

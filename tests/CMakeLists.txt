@@ -10,8 +10,9 @@ add_executable(tests
   BasicOstreamSink.cc
   ChunkedDecoder.cc
   ChunkedEncoder.cc
-  TokenParser.cc
   QuotedStringParser.cc
+  TokenParser.cc
+  utils/byte_literals.cc
 )
 
 target_link_libraries(tests

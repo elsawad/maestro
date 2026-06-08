@@ -4,6 +4,7 @@
 
 #include "ABNF.h"
 #include "ChunkedDecoder.h"
+#include "FeedResult.h"
 #include "FieldCollectionParser.h"
 
 // Feed a chunk of data to the decoder.
@@ -45,19 +46,189 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
 
       case State::READING_CHUNK_EXT:
       case State::READING_LAST_CHUNK_EXT: {
-        // We will ignore chunk extensions here since they are optional and not commonly used, but we will still need to read until the CRLF at the end of the chunk size line
-        while (pos < span.size() && span[pos] != std::byte{'\r'}) {
+        if (span[pos] == std::byte{'\r'}) {
+          // No chunk extension, we expect to see a CRLF immediately after the chunk size
+          this->state =
+              this->state == State::READING_CHUNK_EXT ? State::READING_CHUNK_SIZE_CR
+            : State::READING_LAST_CHUNK_CR;
+          break;
+        }
+
+        if (WSP.contains(static_cast<std::uint8_t>(span[pos]))) {
+          // We found a chunk extension, but we will ignore it since chunk extensions are optional and not commonly used
+          this->state =
+              this->state == State::READING_CHUNK_EXT ? State::READING_CHUNK_EXT_SEMICOLON_BWS
+            : State::READING_LAST_CHUNK_EXT_SEMICOLON_BWS;
+          break;
+        }
+
+        if (span[pos] == std::byte{';'}) {
+          // We found a chunk extension, but we will ignore it since chunk extensions are optional and not commonly used
+          this->state =
+              this->state == State::READING_CHUNK_EXT ? State::READING_CHUNK_EXT_SEMICOLON
+            : State::READING_LAST_CHUNK_EXT_SEMICOLON;
+          break;
+        }
+
+        this->state = State::INVALID;
+        this->handler->on_error();
+        break;
+      }
+
+      case State::READING_CHUNK_EXT_SEMICOLON_BWS:
+      case State::READING_CHUNK_EXT_NAME_BWS:
+      case State::READING_CHUNK_EXT_EQUALS_BWS:
+      case State::READING_CHUNK_EXT_VAL_BWS:
+      case State::READING_LAST_CHUNK_EXT_SEMICOLON_BWS:
+      case State::READING_LAST_CHUNK_EXT_NAME_BWS:
+      case State::READING_LAST_CHUNK_EXT_EQUALS_BWS:
+      case State::READING_LAST_CHUNK_EXT_VAL_BWS: {
+        while (pos < span.size() && WSP.contains(static_cast<std::uint8_t>(span[pos]))) {
           ++pos;
         }
 
         if (pos == span.size()) {
-          // No CRLF found, wait for more data
+          // We only found whitespace, wait for more data
           return {this->status, span.last(0)};
         }
 
         this->state =
-          this->state == State::READING_CHUNK_EXT ? State::READING_CHUNK_SIZE_CR
-          : State::READING_LAST_CHUNK_CR;
+            this->state == State::READING_CHUNK_EXT_SEMICOLON_BWS ? State::READING_CHUNK_EXT_SEMICOLON
+          : this->state == State::READING_CHUNK_EXT_NAME_BWS ? State::READING_CHUNK_EXT_NAME
+          : this->state == State::READING_CHUNK_EXT_EQUALS_BWS ? State::READING_CHUNK_EXT_EQUALS
+          : this->state == State::READING_CHUNK_EXT_VAL_BWS ? State::READING_CHUNK_EXT_VAL
+          : this->state == State::READING_LAST_CHUNK_EXT_SEMICOLON_BWS ? State::READING_LAST_CHUNK_EXT_SEMICOLON
+          : this->state == State::READING_LAST_CHUNK_EXT_NAME_BWS ? State::READING_LAST_CHUNK_EXT_NAME
+          : this->state == State::READING_LAST_CHUNK_EXT_EQUALS_BWS ? State::READING_LAST_CHUNK_EXT_EQUALS
+          : State::READING_LAST_CHUNK_EXT_VAL;
+        break;
+      }
+
+      case State::READING_CHUNK_EXT_SEMICOLON:
+      case State::READING_LAST_CHUNK_EXT_SEMICOLON: {
+        if (span[pos] != std::byte{';'}) {
+          this->state = State::INVALID;
+          this->handler->on_error();
+          break;
+        }
+
+        ++pos;
+        this->state =
+            this->state == State::READING_CHUNK_EXT_SEMICOLON ? State::READING_CHUNK_EXT_NAME_BWS
+          : State::READING_LAST_CHUNK_EXT_NAME_BWS;
+        break;
+      }
+
+      case State::READING_CHUNK_EXT_NAME:
+      case State::READING_LAST_CHUNK_EXT_NAME: {
+        if (!this->chunk_ext_name_parser.has_value()) {
+          this->chunk_ext_name_parser.emplace();
+        }
+
+        const auto [status, consumed] = this->chunk_ext_name_parser->feed(span.subspan(pos));
+
+        if (status == FeedState::NEED_MORE_INPUT) {
+          return {this->status, span.last(0)};
+        }
+
+        if (status == FeedState::ERROR) {
+          this->state = State::INVALID;
+          this->handler->on_error();
+          break;
+        }
+
+        pos += consumed;
+        this->state =
+            this->state == State::READING_CHUNK_EXT_NAME ? State::READING_CHUNK_EXT_REST
+          : State::READING_LAST_CHUNK_EXT_REST;
+        break;
+      }
+
+      case State::READING_CHUNK_EXT_REST:
+      case State::READING_LAST_CHUNK_EXT_REST: {
+        if (span[pos] == std::byte{'\r'}) {
+          // No chunk extension value, we expect to see a CRLF immediately after the chunk extension name
+          const std::string chunk_ext_name{*this->chunk_ext_name_parser->value()};
+          this->chunk_ext_name_parser.reset();
+
+          this->partial_chunk.extensions.emplace_back(chunk_ext_name, std::nullopt);
+
+          this->state =
+              this->state == State::READING_CHUNK_EXT_REST ? State::READING_CHUNK_SIZE_CR
+            : State::READING_LAST_CHUNK_CR;
+          break;
+        }
+
+        if (WSP.contains(span[pos]) || span[pos] == std::byte{'='}) {
+          this->state =
+              this->state == State::READING_CHUNK_EXT_REST ? State::READING_CHUNK_EXT_EQUALS_BWS
+            : State::READING_LAST_CHUNK_EXT_EQUALS_BWS;
+          break;
+        }
+
+        this->state = State::INVALID;
+        this->handler->on_error();
+        break;
+      }
+
+      case State::READING_CHUNK_EXT_EQUALS:
+      case State::READING_LAST_CHUNK_EXT_EQUALS: {
+        if (span[pos] != std::byte{'='}) {
+          this->state = State::INVALID;
+          this->handler->on_error();
+          break;
+        }
+
+        ++pos;
+        this->state =
+            this->state == State::READING_CHUNK_EXT_EQUALS ? State::READING_CHUNK_EXT_VAL_BWS
+          : State::READING_LAST_CHUNK_EXT_VAL_BWS;
+        break;
+      }
+
+      case State::READING_CHUNK_EXT_VAL:
+      case State::READING_LAST_CHUNK_EXT_VAL: {
+        if (!this->chunk_ext_val_parser.has_value() && tchar.contains(span[pos])) {
+          this->chunk_ext_val_parser.emplace(std::in_place_type<TokenParser>);
+        } else if (!this->chunk_ext_val_parser.has_value() && span[pos] == std::byte{'"'}) {
+          this->chunk_ext_val_parser.emplace(std::in_place_type<QuotedStringParser>);
+        } else if (!this->chunk_ext_val_parser.has_value()) {
+          this->state = State::INVALID;
+          this->handler->on_error();
+          break;
+        }
+
+        const auto [status, consumed] = std::visit([span, pos](auto & parser) {
+          return parser.feed(span.subspan(pos));
+        }, *this->chunk_ext_val_parser);
+
+        if (status == FeedState::NEED_MORE_INPUT) {
+          return {this->status, span.last(0)};
+        }
+
+        if (status == FeedState::ERROR) {
+          this->state = State::INVALID;
+          this->handler->on_error();
+          break;
+        }
+
+        const std::string chunk_ext_name{*this->chunk_ext_name_parser->value()};
+        this->chunk_ext_name_parser.reset();
+
+        const std::string chunk_ext_val{std::visit(
+          [](const auto & parser) -> std::string {
+            return *parser.value();
+          },
+          *this->chunk_ext_val_parser
+        )};
+        this->chunk_ext_val_parser.reset();
+
+        this->partial_chunk.extensions.emplace_back(chunk_ext_name, chunk_ext_val);
+
+        pos += consumed;
+        this->state =
+            this->state == State::READING_CHUNK_EXT_VAL ? State::READING_CHUNK_EXT
+          : State::READING_LAST_CHUNK_EXT;
         break;
       }
 

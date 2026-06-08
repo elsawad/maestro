@@ -2,15 +2,15 @@
 #define QUOTED_STRING_PARSER_H
 
 #include <optional>
+#include <span>
 #include <string>
-#include <string_view>
 
 #include "FeedResult.h"
 
 class QuotedStringParser {
   public:
-    FeedResult feed(std::string_view sv);
-    std::optional<std::string_view> get_string() const;
+    FeedResult feed(std::span<const std::byte> span);
+    std::optional<std::string> value() const;
 
   private:
     enum class QuotedStringParserState {

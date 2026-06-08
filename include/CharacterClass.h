@@ -10,7 +10,8 @@ class CharacterClass {
   public:
     CharacterClass(std::initializer_list<std::pair<std::uint8_t, std::uint8_t>> ranges);
     CharacterClass(std::initializer_list<std::uint8_t> chars);
-    bool contains(std::uint8_t c) const;
+    bool contains(std::byte c) const noexcept;
+    bool contains(std::uint8_t c) const noexcept;
   private:
     std::array<bool, NUM_BYTES> bytes{};
 };

@@ -16,7 +16,6 @@ target_sources(maestro
     src/ChunkedDecoder.cc
     src/ChunkedDecoderSink.cc
     src/ChunkedEncoder.cc
-    src/ChunkExtensions.cc
     src/CodingPipelineBuilder.cc
     src/Encoder.cc
     src/Field.cc

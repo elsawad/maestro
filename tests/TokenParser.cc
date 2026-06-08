@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "TokenParser.h"
+#include "utils/byte_literals.h"
 
 class TokenParserTest : public ::testing::Test {
   protected:
@@ -8,7 +9,7 @@ class TokenParserTest : public ::testing::Test {
 };
 
 TEST_F(TokenParserTest, EmptyInput) {
-  const std::string input{""};
+  std::vector<std::byte> input{""_b};
   const FeedResult result{parser.feed(input)};
   EXPECT_EQ(result.state, FeedState::NEED_MORE_INPUT);
   EXPECT_EQ(result.consumed, input.size());
@@ -18,7 +19,7 @@ TEST_F(TokenParserTest, EmptyInput) {
 }
 
 TEST_F(TokenParserTest, ValidToken) {
-  const std::string input1{"token123"};
+  std::vector<std::byte> input1{"token123"_b};
   const FeedResult result1{parser.feed(input1)};
   EXPECT_EQ(result1.state, FeedState::NEED_MORE_INPUT);
   EXPECT_EQ(result1.consumed, input1.size());
@@ -26,7 +27,7 @@ TEST_F(TokenParserTest, ValidToken) {
   const std::optional<std::string_view> value1{parser.value()};
   ASSERT_FALSE(value1.has_value());
 
-  const std::string input2{" "}; // space is not a tchar and thus ends the token
+  std::vector<std::byte> input2{" "_b}; // space is not a tchar and thus ends the token
   const FeedResult result2{parser.feed(input2)};
   EXPECT_EQ(result2.state, FeedState::COMPLETE);
   EXPECT_EQ(result2.consumed, 0); // space also does not contribute to the token parser byte consumption count
@@ -37,7 +38,7 @@ TEST_F(TokenParserTest, ValidToken) {
 }
 
 TEST_F(TokenParserTest, ImmediatelyInvalidToken) {
-  const std::string input{"\ninvalid token"};
+  std::vector<std::byte> input{"\ninvalid token"_b};
   const FeedResult result{parser.feed(input)};
   EXPECT_EQ(result.state, FeedState::ERROR); // the first character fed to a parser should be valid
   EXPECT_EQ(result.consumed, 0);
@@ -47,7 +48,7 @@ TEST_F(TokenParserTest, ImmediatelyInvalidToken) {
 }
 
 TEST_F(TokenParserTest, ValidTokenFollowedByExtraData) {
-  const std::string input{"validToken extraData"};
+  std::vector<std::byte> input{"validToken extraData"_b};
   const FeedResult result{parser.feed(input)};
   EXPECT_EQ(result.state, FeedState::COMPLETE);
   EXPECT_EQ(result.consumed, 10); // "validToken" is 10 characters long
@@ -58,7 +59,7 @@ TEST_F(TokenParserTest, ValidTokenFollowedByExtraData) {
 }
 
 TEST_F(TokenParserTest, SplitValidToken) {
-  const std::string input1{"split"};
+  std::vector<std::byte> input1{"split"_b};
   const FeedResult result1{parser.feed(input1)};
   EXPECT_EQ(result1.state, FeedState::NEED_MORE_INPUT);
   EXPECT_EQ(result1.consumed, input1.size());
@@ -66,7 +67,7 @@ TEST_F(TokenParserTest, SplitValidToken) {
   const std::optional<std::string_view> value1{parser.value()};
   ASSERT_FALSE(value1.has_value());
 
-  const std::string input2{"Token ~~ this is not part of the token"};
+  std::vector<std::byte> input2{"Token ~~ this is not part of the token"_b};
   const FeedResult result2{parser.feed(input2)};
   EXPECT_EQ(result2.state, FeedState::COMPLETE);
   EXPECT_EQ(result2.consumed, 5); // size of "Token"
@@ -77,7 +78,7 @@ TEST_F(TokenParserTest, SplitValidToken) {
 }
 
 TEST_F(TokenParserTest, MoreDataAfterComplete) {
-  const std::string input1{"completeToken "};
+  std::vector<std::byte> input1{"completeToken "_b};
   const FeedResult result1{parser.feed(input1)};
   EXPECT_EQ(result1.state, FeedState::COMPLETE);
   EXPECT_EQ(result1.consumed, 13);
@@ -86,7 +87,7 @@ TEST_F(TokenParserTest, MoreDataAfterComplete) {
   ASSERT_TRUE(value2.has_value());
   EXPECT_EQ(value2.value(), "completeToken");
 
-  const std::string input3{"extraData"};
+  std::vector<std::byte> input3{"extraData"_b};
   const FeedResult result3{parser.feed(input3)};
   EXPECT_EQ(result3.state, FeedState::COMPLETE); // feeding more data after completion should not change the state
   EXPECT_EQ(result3.consumed, 0); // feeding more data after completion should not change the byte consumption count
@@ -97,7 +98,7 @@ TEST_F(TokenParserTest, MoreDataAfterComplete) {
 }
 
 TEST_F(TokenParserTest, MoreDataAfterError) {
-  const std::string input1{" invalidToken"};
+  std::vector<std::byte> input1{" invalidToken"_b};
   const FeedResult result1{parser.feed(input1)};
   EXPECT_EQ(result1.state, FeedState::ERROR);
   EXPECT_EQ(result1.consumed, 0);
@@ -105,7 +106,7 @@ TEST_F(TokenParserTest, MoreDataAfterError) {
   const std::optional<std::string_view> value1{parser.value()};
   EXPECT_FALSE(value1.has_value());
 
-  const std::string input2{"extraData"};
+  std::vector<std::byte> input2{"extraData"_b};
   const FeedResult result2{parser.feed(input2)};
   EXPECT_EQ(result2.state, FeedState::ERROR); // feeding more data after error should not change the state
   EXPECT_EQ(result2.consumed, 0); // feeding more data after error should not change the byte consumption count

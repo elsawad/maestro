@@ -1,15 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "ChunkedDecoder.h"
-
-std::vector<std::byte> operator"" _b(const char *str, std::size_t len) {
-  std::vector<std::byte> result;
-  result.reserve(len);
-  for (std::size_t i = 0; i < len; ++i) {
-    result.push_back(static_cast<std::byte>(str[i]));
-  }
-  return result;
-}
+#include "utils/byte_literals.h"
 
 class ChunkedDecoderTestHandler: public ChunkedDecoder::Handler {
   public:
@@ -54,7 +46,7 @@ TEST_F(ChunkedDecoderTest, NoInput) {
 };
 
 TEST_F(ChunkedDecoderTest, EmptyInput) {
-  std::vector<std::byte> input{""_b};
+  const std::vector<std::byte> input{""_b};
   ChunkedDecoder::FeedResult result{decoder.feed(input)};
   EXPECT_EQ(result.status, ChunkedDecoder::Status::IN_PROGRESS);
   EXPECT_TRUE(result.remaining.empty());
@@ -65,7 +57,7 @@ TEST_F(ChunkedDecoderTest, EmptyInput) {
 };
 
 TEST_F(ChunkedDecoderTest, RepeatedEmptyInput) {
-  std::vector<std::byte> input{""_b};
+  const std::vector<std::byte> input{""_b};
   for (int i = 0; i < 10; ++i) {
     ChunkedDecoder::FeedResult result{decoder.feed(input)};
     EXPECT_EQ(result.status, ChunkedDecoder::Status::IN_PROGRESS);
@@ -78,7 +70,7 @@ TEST_F(ChunkedDecoderTest, RepeatedEmptyInput) {
 };
 
 TEST_F(ChunkedDecoderTest, ImmediatelyInvalidInput) {
-  std::vector<std::byte> input{"this is a bad input"_b};
+  const std::vector<std::byte> input{"this is a bad input"_b};
   ChunkedDecoder::FeedResult result{decoder.feed(input)};
   EXPECT_EQ(result.status, ChunkedDecoder::Status::INVALID);
   EXPECT_TRUE(std::equal(result.remaining.begin(), result.remaining.end(), input.cbegin(), input.cend()));
@@ -89,18 +81,18 @@ TEST_F(ChunkedDecoderTest, ImmediatelyInvalidInput) {
 };
 
 TEST_F(ChunkedDecoderTest, NoData) {
-  std::vector<std::byte> input{"0\r\n\r\n"_b};
+  const std::vector<std::byte> input{"0\r\n\r\n"_b};
   ChunkedDecoder::FeedResult result{decoder.feed(input)};
   EXPECT_EQ(result.status, ChunkedDecoder::Status::DONE);
   EXPECT_TRUE(result.remaining.empty());
   ASSERT_EQ(handler.chunks.size(), 1);
   const Chunk * chunk{&handler.chunks[0]};
-  EXPECT_TRUE(chunk->extensions.empty()); // extensions are not yet implemented
+  EXPECT_TRUE(chunk->extensions.empty());
   EXPECT_TRUE(chunk->data.empty());
 };
 
 TEST_F(ChunkedDecoderTest, NoDataAndRepeatedEmptyData) {
-  std::vector<std::byte> empty{""_b};
+  const std::vector<std::byte> empty{""_b};
   for (int i = 0; i < 10; ++i) {
     ChunkedDecoder::FeedResult result{decoder.feed(empty)};
     EXPECT_EQ(result.status, ChunkedDecoder::Status::IN_PROGRESS);
@@ -111,12 +103,12 @@ TEST_F(ChunkedDecoderTest, NoDataAndRepeatedEmptyData) {
   EXPECT_FALSE(handler.error);
   EXPECT_FALSE(handler.finished);
 
-  std::vector<std::byte> input{"0\r\n\r\n"_b};
+  const std::vector<std::byte> input{"0\r\n\r\n"_b};
   ChunkedDecoder::FeedResult result{decoder.feed(input)};
   EXPECT_EQ(result.status, ChunkedDecoder::Status::DONE);
   EXPECT_TRUE(result.remaining.empty());
   ASSERT_EQ(handler.chunks.size(), 1);
-  const auto chunk{&handler.chunks[0]};
+  const Chunk * const chunk{&handler.chunks[0]};
   EXPECT_TRUE(chunk->data.empty());
   EXPECT_TRUE(chunk->extensions.empty());
 
@@ -135,7 +127,7 @@ TEST_F(ChunkedDecoderTest, NoDataAndRepeatedEmptyData) {
 };
 
 TEST_F(ChunkedDecoderTest, SplitEmptyData) {
-  std::vector<std::byte> input1{"0\r"_b};
+  const std::vector<std::byte> input1{"0\r"_b};
   ChunkedDecoder::FeedResult result{decoder.feed(input1)};
   EXPECT_EQ(result.status, ChunkedDecoder::Status::IN_PROGRESS);
   EXPECT_TRUE(result.remaining.empty());
@@ -143,7 +135,7 @@ TEST_F(ChunkedDecoderTest, SplitEmptyData) {
   EXPECT_FALSE(handler.finished);
   EXPECT_FALSE(handler.error);
 
-  std::vector<std::byte> input2{"\n\r\n"_b};
+  const std::vector<std::byte> input2{"\n\r\n"_b};
   result = decoder.feed(input2);
   EXPECT_EQ(result.status, ChunkedDecoder::Status::DONE);
   EXPECT_TRUE(result.remaining.empty());
@@ -158,15 +150,15 @@ TEST_F(ChunkedDecoderTest, SplitEmptyData) {
 }
 
 TEST_F(ChunkedDecoderTest, ExtraData) {
-  std::vector<std::byte> input{"0\r\n\r\nthis should not be read by the decoder"_b};
+  const std::vector<std::byte> input{"0\r\n\r\nthis should not be read by the decoder"_b};
   ChunkedDecoder::FeedResult result{decoder.feed(input)};
   EXPECT_EQ(result.status, ChunkedDecoder::Status::DONE);
-  const auto expected_remaining{"this should not be read by the decoder"_b};
+  const std::vector<std::byte> expected_remaining{"this should not be read by the decoder"_b};
   EXPECT_TRUE(std::equal(result.remaining.begin(), result.remaining.end(), expected_remaining.cbegin(), expected_remaining.cend()));
 }
 
 TEST_F(ChunkedDecoderTest, SingleChunk) {
-  std::vector<std::byte> input{"4\r\nWiki\r\n0\r\n\r\n"_b};
+  const std::vector<std::byte> input{"4\r\nWiki\r\n0\r\n\r\n"_b};
   ChunkedDecoder::FeedResult result{decoder.feed(input)};
   EXPECT_EQ(result.status, ChunkedDecoder::Status::DONE);
   EXPECT_TRUE(result.remaining.empty());
@@ -183,7 +175,7 @@ TEST_F(ChunkedDecoderTest, SingleChunk) {
 };
 
 TEST_F(ChunkedDecoderTest, MultipleChunks) {
-  std::vector<std::byte> input{"4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n"_b};
+  const std::vector<std::byte> input{"4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n"_b};
   ChunkedDecoder::FeedResult result{decoder.feed(input)};
   EXPECT_EQ(result.status, ChunkedDecoder::Status::DONE);
   EXPECT_TRUE(result.remaining.empty());
@@ -207,7 +199,7 @@ TEST_F(ChunkedDecoderTest, MultipleChunks) {
 };
 
 TEST_F(ChunkedDecoderTest, EmptyChunkWithExtensions) {
-  std::vector<std::byte> input{"0;ext1=value1;ext2=\"value2\"\r\n\r\n"_b};
+  const std::vector<std::byte> input{"0;ext1=value1;ext2=\"value2\"\r\n\r\n"_b};
   ChunkedDecoder::FeedResult result{decoder.feed(input)};
   EXPECT_EQ(result.status, ChunkedDecoder::Status::DONE);
   EXPECT_TRUE(result.remaining.empty());
@@ -216,15 +208,61 @@ TEST_F(ChunkedDecoderTest, EmptyChunkWithExtensions) {
 
   const Chunk * const chunk{&handler.chunks[0]};
   EXPECT_TRUE(chunk->data.empty());
-  EXPECT_TRUE(chunk->extensions.empty()); // extensions are not yet implemented so they are skipped
+  ASSERT_EQ(chunk->extensions.size(), 2);
+  EXPECT_EQ(chunk->extensions[0].name, "ext1");
+  EXPECT_EQ(chunk->extensions[0].val, "value1");
+  EXPECT_EQ(chunk->extensions[1].name, "ext2");
+  EXPECT_EQ(chunk->extensions[1].val, "value2");
 
   EXPECT_TRUE(handler.finished);
   EXPECT_FALSE(handler.error);
 }
 
+TEST_F(ChunkedDecoderTest, EmptyChunkWithBWS) {
+  const std::vector<std::byte> input{"0 ;  ext1   =    val1\r\n\r\n"_b};
+  ChunkedDecoder::FeedResult result{decoder.feed(input)};
+  EXPECT_EQ(result.status, ChunkedDecoder::Status::DONE);
+  EXPECT_TRUE(result.remaining.empty());
+
+  ASSERT_EQ(handler.chunks.size(), 1);
+
+  const Chunk * const chunk{&handler.chunks[0]};
+  EXPECT_TRUE(chunk->data.empty());
+  ASSERT_EQ(chunk->extensions.size(), 1);
+  EXPECT_EQ(chunk->extensions[0].name, "ext1");
+  EXPECT_EQ(chunk->extensions[0].val, "val1");
+
+  EXPECT_TRUE(handler.finished);
+  EXPECT_FALSE(handler.error);
+}
+
+TEST_F(ChunkedDecoderTest, ChunkDataStartAfterExtSemicolon) {
+  const std::vector<std::byte> input{"0;\r\n\r\n"_b};
+  ChunkedDecoder::FeedResult result{decoder.feed(input)};
+  EXPECT_EQ(result.status, ChunkedDecoder::Status::INVALID);
+
+  const std::vector<std::byte> expected_remaining{"\r\n\r\n"_b};
+  EXPECT_TRUE(std::equal(input.cbegin() + 2, input.cend(), expected_remaining.cbegin(), expected_remaining.cend()));
+
+  EXPECT_FALSE(handler.finished);
+  EXPECT_TRUE(handler.error);
+}
+
+TEST_F(ChunkedDecoderTest, ChunkDataStartAfterExtEquals) {
+  const std::vector<std::byte> input{"0;ext=\r\n\r\n"_b};
+  ChunkedDecoder::FeedResult result{decoder.feed(input)};
+  EXPECT_EQ(result.status, ChunkedDecoder::Status::INVALID);
+
+  const std::vector<std::byte> expected_remaining{"\r\n\r\n"_b};
+  EXPECT_TRUE(std::equal(input.cbegin() + 6, input.cend(), expected_remaining.cbegin(), expected_remaining.cend()));
+
+  EXPECT_FALSE(handler.finished);
+  EXPECT_TRUE(handler.error);
+}
+
 TEST_F(ChunkedDecoderTest, LowercaseChunkSize) {
   // The HTTP/1.1 spec requires chunk sizes to use uppercase lettering.
-  std::vector<std::byte> input{"a\r\nWrong case\r\n0\r\n\r\n"_b};
+  const std::vector<std::byte> input{"a\r\nWrong case\r\n0\r\n\r\n"_b};
   ChunkedDecoder::FeedResult result{decoder.feed(input)};
   EXPECT_EQ(result.status, ChunkedDecoder::Status::INVALID);
   EXPECT_TRUE(std::equal(result.remaining.begin(), result.remaining.end(), input.cbegin(), input.cend()));
@@ -236,7 +274,7 @@ TEST_F(ChunkedDecoderTest, LowercaseChunkSize) {
 
 TEST_F(ChunkedDecoderTest, StrangeBodyCharacters) {
   // The chunked encoding should be able to handle any binary data within the chunk size
-  std::vector<std::byte> input{"F\r\n\r\n\0\xffweird\\\"\a_b;\r\n0\r\n\r\n"_b};
+  const std::vector<std::byte> input{"F\r\n\r\n\0\xffweird\\\"\a_b;\r\n0\r\n\r\n"_b};
   ChunkedDecoder::FeedResult result{decoder.feed(input)};
   EXPECT_EQ(result.status, ChunkedDecoder::Status::DONE);
   EXPECT_TRUE(result.remaining.empty());
@@ -256,7 +294,7 @@ TEST_F(ChunkedDecoderTest, StrangeBodyCharacters) {
 }
 
 TEST_F(ChunkedDecoderTest, SplitChunkSize) {
-  std::vector<std::byte> input1{"1"_b};
+  const std::vector<std::byte> input1{"1"_b};
   ChunkedDecoder::FeedResult result1{decoder.feed(input1)};
   EXPECT_EQ(result1.status, ChunkedDecoder::Status::IN_PROGRESS);
   EXPECT_TRUE(result1.remaining.empty());
@@ -264,7 +302,7 @@ TEST_F(ChunkedDecoderTest, SplitChunkSize) {
   EXPECT_FALSE(handler.error);
   EXPECT_FALSE(handler.finished);
 
-  std::vector<std::byte> input2{"0\r\nabcdefghijklmnop\r\n0\r\n\r\n"_b};
+  const std::vector<std::byte> input2{"0\r\nabcdefghijklmnop\r\n0\r\n\r\n"_b};
   ChunkedDecoder::FeedResult result2{decoder.feed(input2)};
   EXPECT_EQ(result2.status, ChunkedDecoder::Status::DONE);
   EXPECT_TRUE(result2.remaining.empty());
@@ -282,7 +320,7 @@ TEST_F(ChunkedDecoderTest, SplitChunkSize) {
 }
 
 TEST_F(ChunkedDecoderTest, SplitChunkBody) {
-  std::vector<std::byte> input1{"2\r\n0"_b};
+  const std::vector<std::byte> input1{"2\r\n0"_b};
   ChunkedDecoder::FeedResult result1{decoder.feed(input1)};
   EXPECT_EQ(result1.status, ChunkedDecoder::Status::IN_PROGRESS);
   EXPECT_TRUE(result1.remaining.empty());
@@ -290,7 +328,7 @@ TEST_F(ChunkedDecoderTest, SplitChunkBody) {
   EXPECT_FALSE(handler.finished);
   EXPECT_TRUE(handler.chunks.empty());
 
-  std::vector<std::byte> input2{"1\r\n0\r\n\r\n"_b};
+  const std::vector<std::byte> input2{"1\r\n0\r\n\r\n"_b};
   ChunkedDecoder::FeedResult result2{decoder.feed(input2)};
   EXPECT_EQ(result2.status, ChunkedDecoder::Status::DONE);
   EXPECT_TRUE(result2.remaining.empty());
@@ -308,7 +346,7 @@ TEST_F(ChunkedDecoderTest, SplitChunkBody) {
 }
 
 TEST_F(ChunkedDecoderTest, SplitChunkBodyWithEmptyFeed) {
-  std::vector<std::byte> input1{"2\r\n0"_b};
+  const std::vector<std::byte> input1{"2\r\n0"_b};
   ChunkedDecoder::FeedResult result1{decoder.feed(input1)};
   EXPECT_EQ(result1.status, ChunkedDecoder::Status::IN_PROGRESS);
   EXPECT_TRUE(result1.remaining.empty());
@@ -316,14 +354,14 @@ TEST_F(ChunkedDecoderTest, SplitChunkBodyWithEmptyFeed) {
   EXPECT_FALSE(handler.finished);
   EXPECT_TRUE(handler.chunks.empty());
 
-  std::vector<std::byte> input2{""_b};
+  const std::vector<std::byte> input2{""_b};
   ChunkedDecoder::FeedResult result2{decoder.feed(input2)};
   EXPECT_EQ(result2.status, ChunkedDecoder::Status::IN_PROGRESS);
   EXPECT_TRUE(result2.remaining.empty());
   EXPECT_FALSE(handler.error);
   EXPECT_FALSE(handler.finished);
 
-  std::vector<std::byte> input3{"1\r\n0\r\n\r\n"_b};
+  const std::vector<std::byte> input3{"1\r\n0\r\n\r\n"_b};
   ChunkedDecoder::FeedResult result3{decoder.feed(input3)};
   EXPECT_EQ(result3.status, ChunkedDecoder::Status::DONE);
   EXPECT_TRUE(result3.remaining.empty());
