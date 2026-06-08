@@ -34,11 +34,9 @@ class ChunkedDecoder: public StreamProcessor {
       READING_CHUNK_SIZE,
       READING_CHUNK_EXT,
       READING_CHUNK_EXT_SEMICOLON_BWS,
-      READING_CHUNK_EXT_SEMICOLON,
       READING_CHUNK_EXT_NAME_BWS,
       READING_CHUNK_EXT_NAME,
       READING_CHUNK_EXT_REST_BWS,
-      READING_CHUNK_EXT_REST,
       READING_CHUNK_EXT_VAL_BWS,
       READING_CHUNK_EXT_VAL,
       READING_CHUNK_SIZE_LF,
@@ -60,7 +58,7 @@ class ChunkedDecoder: public StreamProcessor {
     bool is_last_chunk{false};
 
     std::vector<std::byte> buffer;
-    std::size_t current_chunk_size = 0;
+    std::size_t remaining_chunk_size = 0;
 
     std::optional<TokenParser> chunk_ext_name_parser;
     std::optional<std::variant<TokenParser, QuotedStringParser>> chunk_ext_val_parser;

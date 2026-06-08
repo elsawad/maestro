@@ -31,11 +31,11 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
           break;
         }
 
-        const std::string current_chunk_size_str{reinterpret_cast<const char *>(this->buffer.data()), this->buffer.size()};
+        const std::string chunk_size_str{reinterpret_cast<const char *>(this->buffer.data()), this->buffer.size()};
         this->buffer.clear();
-        this->current_chunk_size = std::stoull(current_chunk_size_str, nullptr, 16);
+        this->remaining_chunk_size = std::stoull(chunk_size_str, nullptr, 16);
 
-        this->is_last_chunk = this->current_chunk_size == 0;
+        this->is_last_chunk = this->remaining_chunk_size == 0;
         this->state = State::READING_CHUNK_EXT;
         break;
       }
@@ -80,23 +80,55 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
           return {this->status, span.last(0)};
         }
 
-        this->state =
-            this->state == State::READING_CHUNK_EXT_SEMICOLON_BWS ? State::READING_CHUNK_EXT_SEMICOLON
-          : this->state == State::READING_CHUNK_EXT_NAME_BWS ? State::READING_CHUNK_EXT_NAME
-          : this->state == State::READING_CHUNK_EXT_REST_BWS ? State::READING_CHUNK_EXT_REST
-          : State::READING_CHUNK_EXT_VAL;
-        break;
-      }
-
-      case State::READING_CHUNK_EXT_SEMICOLON: {
-        if (span[pos] != std::byte{';'}) {
-          this->state = State::INVALID;
-          this->handler->on_error();
+        if (this->state == State::READING_CHUNK_EXT_SEMICOLON_BWS && span[pos] == std::byte{';'}) {
+          ++pos;
+          this->state = State::READING_CHUNK_EXT_NAME_BWS;
           break;
         }
 
-        ++pos;
-        this->state = State::READING_CHUNK_EXT_NAME_BWS;
+        if (this->state == State::READING_CHUNK_EXT_NAME_BWS && tchar.contains(span[pos])) {
+          this->state = State::READING_CHUNK_EXT_NAME;
+          break;
+        }
+
+        if (this->state == State::READING_CHUNK_EXT_REST_BWS && span[pos] == std::byte{';'}) {
+          // No extension value and extensions continue
+          const std::string chunk_ext_name{*this->chunk_ext_name_parser->value()};
+          this->chunk_ext_name_parser.reset();
+
+          this->partial_chunk.extensions.emplace_back(chunk_ext_name, std::nullopt);
+
+          ++pos;
+          this->state = State::READING_CHUNK_EXT_NAME_BWS;
+          break;
+        }
+
+        if (this->state == State::READING_CHUNK_EXT_REST_BWS && span[pos] == std::byte{'='}) {
+          // There is an extension value
+          ++pos;
+          this->state = State::READING_CHUNK_EXT_VAL_BWS;
+          break;
+        }
+
+        if (this->state == State::READING_CHUNK_EXT_REST_BWS && span[pos] == std::byte{'\r'}) {
+          // No chunk extension value and extensions end, we expect to see a CRLF immediately after the chunk extension name
+          const std::string chunk_ext_name{*this->chunk_ext_name_parser->value()};
+          this->chunk_ext_name_parser.reset();
+
+          this->partial_chunk.extensions.emplace_back(chunk_ext_name, std::nullopt);
+
+          ++pos;
+          this->state = State::READING_CHUNK_SIZE_LF;
+          break;
+        }
+
+        if (this->state == State::READING_CHUNK_EXT_VAL_BWS && (tchar.contains(span[pos]) || span[pos] == std::byte{'"'})) {
+          this->state = State::READING_CHUNK_EXT_VAL;
+          break;
+        }
+
+        this->state = State::INVALID;
+        this->handler->on_error();
         break;
       }
 
@@ -119,43 +151,6 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
 
         pos += consumed;
         this->state = State::READING_CHUNK_EXT_REST_BWS;
-        break;
-      }
-
-      case State::READING_CHUNK_EXT_REST: {
-        if (span[pos] == std::byte{';'}) {
-          // No extension value and extensions continue
-          const std::string chunk_ext_name{*this->chunk_ext_name_parser->value()};
-          this->chunk_ext_name_parser.reset();
-
-          this->partial_chunk.extensions.emplace_back(chunk_ext_name, std::nullopt);
-
-          ++pos;
-          this->state = State::READING_CHUNK_EXT_NAME_BWS;
-          break;
-        }
-
-        if (span[pos] == std::byte{'='}) {
-          // There is an extension value
-          ++pos;
-          this->state = State::READING_CHUNK_EXT_VAL_BWS;
-          break;
-        }
-
-        if (span[pos] == std::byte{'\r'}) {
-          // No chunk extension value and extensions end, we expect to see a CRLF immediately after the chunk extension name
-          const std::string chunk_ext_name{*this->chunk_ext_name_parser->value()};
-          this->chunk_ext_name_parser.reset();
-
-          this->partial_chunk.extensions.emplace_back(chunk_ext_name, std::nullopt);
-
-          ++pos;
-          this->state = State::READING_CHUNK_SIZE_LF;
-          break;
-        }
-
-        this->state = State::INVALID;
-        this->handler->on_error();
         break;
       }
 
@@ -255,19 +250,19 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
           return {this->status, span.last(0)};
         }
 
-        if (bytes_available < this->current_chunk_size) {
+        if (bytes_available < this->remaining_chunk_size) {
           const auto new_data = span.subspan(pos);
           this->handler->on_data(new_data);
           this->partial_chunk.data.insert(this->partial_chunk.data.end(), new_data.begin(), new_data.end());
-          this->current_chunk_size -= bytes_available;
+          this->remaining_chunk_size -= bytes_available;
           return {this->status, span.last(0)};
         }
 
-        const auto new_data = span.subspan(pos, this->current_chunk_size);
+        const auto new_data = span.subspan(pos, this->remaining_chunk_size);
         this->handler->on_data(new_data);
         this->partial_chunk.data.insert(this->partial_chunk.data.end(), new_data.begin(), new_data.end());
-        pos += this->current_chunk_size;
-        this->current_chunk_size = 0;
+        pos += this->remaining_chunk_size;
+        this->remaining_chunk_size = 0;
 
         this->state = State::READING_CHUNK_DATA_CR;
         break;
