@@ -31,6 +31,9 @@ class FieldCollection {
         std::vector<Field>::iterator it;
     };
 
+    Field & at(std::size_t);
+    const Field & at(std::size_t pos) const;
+
     ConstIterator begin() const;
     Iterator begin();
 
@@ -42,6 +45,7 @@ class FieldCollection {
     ConstIterator end() const;
     Iterator end();
     void push_back(Field & field);
+    std::size_t size() const noexcept;
 };
 
 #include "FieldCollection.tcc"

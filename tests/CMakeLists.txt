@@ -10,6 +10,7 @@ add_executable(tests
   BasicOstreamSink.cc
   ChunkedDecoder.cc
   ChunkedEncoder.cc
+  FieldCollectionParser.cc
   QuotedStringParser.cc
   TokenParser.cc
   utils/byte_literals.cc

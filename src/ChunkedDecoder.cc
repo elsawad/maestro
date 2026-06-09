@@ -288,7 +288,7 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
           }
 
           case FieldCollectionParser::Status::DONE: {
-            this->handler->on_trailer_section(std::move(this->field_collection_parser->get_fields()));
+            this->handler->on_trailer_section(std::move(this->field_collection_parser->value()));
             pos = span.size() - remaining.size();
             this->state = State::READING_CHUNKED_BODY_CR;
             break;
@@ -300,6 +300,8 @@ ChunkedDecoder::FeedResult ChunkedDecoder::feed(std::span<const std::byte> span)
             break;
           }
         }
+
+        break;
       }
 
       case State::INVALID: {

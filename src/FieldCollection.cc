@@ -1,6 +1,12 @@
-#include <optional>
-
 #include "FieldCollection.h"
+
+Field & FieldCollection::at(std::size_t pos) {
+  return this->fields.at(pos);
+}
+
+const Field & FieldCollection::at(std::size_t pos) const {
+  return this->fields.at(pos);
+}
 
 FieldCollection::Iterator FieldCollection::begin() {
   return FieldCollection::Iterator(this->fields.begin());
@@ -64,4 +70,8 @@ bool FieldCollection::Iterator::operator!=(const Iterator & other) const {
 
 void FieldCollection::push_back(Field & field) {
   this->fields.push_back(field);
+}
+
+std::size_t FieldCollection::size() const noexcept {
+  return this->fields.size();
 }

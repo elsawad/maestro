@@ -1,51 +1,61 @@
-#include <algorithm>
-#include <span>
-
 #include "ABNF.h"
-#include "Field.h"
 #include "FieldCollectionParser.h"
-#include "TokenParser.h"
 
 const CharacterClass field_vchar{{0x21, 0x7E}, {0x80, 0xFF}}; // VCHAR / obs-text
 
 FieldCollectionParser::FeedResult FieldCollectionParser::feed(std::span<const std::byte> span) {
-  size_t pos = 0;
-
+  std::size_t pos{0};
   while (pos < span.size() && this->status == Status::IN_PROGRESS) {
     switch (this->state) {
       case State::READING_FIELD_NAME: {
-        if (this->field_name.empty() && span[pos] == std::byte{'\r'}) {
-          this->state = State::READING_FINAL_CR;
+        if (!this->field_name_parser.has_value() && !tchar.contains(span[pos])) {
+          this->state = State::DONE;
           break;
         }
 
-        std::uint8_t c;
-        while (pos < span.size() && tchar.contains(c = static_cast<std::uint8_t>(span[pos]))) {
-          this->field_name.push_back(c);
-          ++pos;
+        if (!this->field_name_parser.has_value()) {
+          this->field_name_parser.emplace();
         }
 
-        if (pos == span.size()) {
-          return {this->status, span.subspan(pos)};
+        const auto [status, consumed] = this->field_name_parser->feed(span.subspan(pos));
+
+        switch (status) {
+          case FeedState::NEED_MORE_INPUT: {
+            return {this->status, span.last(0)};
+          }
+
+          case FeedState::COMPLETE: {
+            this->field_name = std::move(*this->field_name_parser->value());
+            this->field_name_parser.reset();
+
+            pos += consumed;
+            // TokenParser must see a non-tchar to end a token, so pos + consumed < span.size()
+            if (span[pos] != std::byte{':'}) {
+              this->state = State::INVALID;
+              break;
+            }
+
+            ++pos;
+            this->state = State::READING_OWS_BEFORE_FIELD_VALUE;
+            break;
+          }
+
+          case FeedState::ERROR: {
+            this->status = Status::INVALID;
+            break;
+          }
         }
 
-        if (this->field_name.empty() || span[pos] != std::byte{':'}) {
-          this->state = State::INVALID;
-          break;
-        }
-
-        ++pos;
-        this->state = State::READING_OWS_BEFORE_FIELD_VALUE;
         break;
       }
 
       case State::READING_OWS_BEFORE_FIELD_VALUE: {
-        while (pos < span.size() && WSP.contains(static_cast<std::uint8_t>(span[pos]))) {
+        while (pos < span.size() && WSP.contains(span[pos])) {
           ++pos;
         }
 
         if (pos == span.size()) {
-          return {this->status, span.subspan(pos)};
+          return {this->status, span.last(0)};
         }
 
         this->state = State::READING_FIELD_VALUE;
@@ -59,71 +69,47 @@ FieldCollectionParser::FeedResult FieldCollectionParser::feed(std::span<const st
         // field-vchar    = VCHAR / obs-text
         // obs-text       = %x80-FF
 
-        // For simplicity, we will look for any character that is not in field-vchar or SP/HTAB.
-        std::uint8_t c;
-        while (pos < span.size() && (field_vchar.contains(c = static_cast<std::uint8_t>(span[pos])) || WSP.contains(c))) {
-          this->field_value.push_back(c);
+        // For simplicity, we will look for any character that is not in field-vchar or WSP.
+        std::byte c;
+        while (pos < span.size() && (field_vchar.contains(c = span[pos]) || WSP.contains(c))) {
+          this->field_value.push_back(static_cast<char>(c));
           ++pos;
         }
 
         if (pos == span.size()) {
-          return {this->status, span.subspan(pos)};
+          return {this->status, span.last(0)};
+        }
+
+        if (c != std::byte{'\r'}) {
+          this->state = State::INVALID;
+          break;
         }
 
         // We will clear out optional whitespace at the end of the field value and move on to the CRLF reading phase.
         auto rit{this->field_value.crbegin()};
-        while (rit != this->field_value.crend() && WSP.contains(static_cast<std::uint8_t>(*rit))) {
+        while (WSP.contains(*rit)) {
           ++rit;
         }
-
-        if (rit == this->field_value.crend()) {
-          // No field-vchar found at the iterator position
-          this->state = State::INVALID;
-          break;
-        }
-
         this->field_value.erase(rit.base(), this->field_value.cend());
-        this->state = State::READING_FIELD_LINE_CR;
-        break;
-      }
-
-      case State::READING_FIELD_LINE_CR:
-      case State::READING_FINAL_CR: {
-        if (span[pos] != std::byte{'\r'}) {
-          // No CR found at the iterator position
-          this->state = State::INVALID;
-          break;
-        }
-
-        if (this->state == State::READING_FIELD_LINE_CR) {
-          this->state = State::READING_FIELD_LINE_LF;
-        } else {
-          this->state = State::READING_FINAL_LF;
-        }
 
         ++pos;
+        this->state = State::READING_FIELD_LINE_LF;
         break;
       }
 
-      case State::READING_FIELD_LINE_LF:
-      case State::READING_FINAL_LF: {
+      case State::READING_FIELD_LINE_LF: {
         if (span[pos] != std::byte{'\n'}) {
           // No LF found at the iterator position
           this->state = State::INVALID;
           break;
         }
 
-        if (this->state == State::READING_FIELD_LINE_LF) {
-          this->field_collection.emplace_back(std::move(this->field_name), std::move(this->field_value));
-          this->field_name.clear();
-          this->field_value.clear();
-
-          this->state = State::READING_FIELD_NAME;
-        } else {
-          this->state = State::DONE;
-        }
+        this->field_collection.emplace_back(std::move(this->field_name), std::move(this->field_value));
+        this->field_name.clear();
+        this->field_value.clear();
 
         ++pos;
+        this->state = State::READING_FIELD_NAME;
         break;
       }
 
@@ -142,6 +128,6 @@ FieldCollectionParser::FeedResult FieldCollectionParser::feed(std::span<const st
   return {this->status, span.subspan(pos)};
 }
 
-FieldCollection & FieldCollectionParser::get_fields() {
+FieldCollection & FieldCollectionParser::value() {
   return this->field_collection;
 }
