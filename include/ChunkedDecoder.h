@@ -16,6 +16,7 @@
 class ChunkedDecoder: public StreamProcessor {
   public:
     FeedResult feed(std::span<const std::byte> span) override;
+    FeedState state() const override;
 
     struct Handler {
       virtual ~Handler() = default;
@@ -30,7 +31,7 @@ class ChunkedDecoder: public StreamProcessor {
     void unset_handler();
 
   private:
-    enum class State {
+    enum class ChunkedDecoderState {
       READING_CHUNK_SIZE,
       READING_CHUNK_EXT,
       READING_CHUNK_EXT_SEMICOLON_BWS,
@@ -49,7 +50,7 @@ class ChunkedDecoder: public StreamProcessor {
       DONE,
       INVALID
     };
-    State state = State::READING_CHUNK_SIZE;
+    ChunkedDecoderState internal_state = ChunkedDecoderState::READING_CHUNK_SIZE;
 
     static Handler default_handler;
     Handler * handler{&default_handler};

@@ -13,7 +13,7 @@ void ChunkedDecoderSink::write(const void *data, size_t size) {
 
 void ChunkedDecoderSink::finish() {
   // We will ignore any remaining data in the decoder since the decoder will have already consumed all valid chunks and trailer sections from the input
-  if (this->decoder.get_status() != ChunkedDecoder::Status::DONE) {
+  if (this->decoder.state() != FeedState::COMPLETE) {
     throw std::runtime_error("Cannot finish ChunkedDecoderSink: decoder is in progress or invalid");
   }
   this->byte_sink->finish();

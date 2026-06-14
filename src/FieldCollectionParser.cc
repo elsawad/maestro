@@ -3,13 +3,13 @@
 
 const CharacterClass field_vchar{{0x21, 0x7E}, {0x80, 0xFF}}; // VCHAR / obs-text
 
-FieldCollectionParser::FeedResult FieldCollectionParser::feed(std::span<const std::byte> span) {
+FeedResult FieldCollectionParser::feed(std::span<const std::byte> span) {
   std::size_t pos{0};
-  while (pos < span.size() && this->status == Status::IN_PROGRESS) {
-    switch (this->state) {
-      case State::READING_FIELD_NAME: {
+  while (pos < span.size() && this->internal_state != FieldCollectionParserState::DONE && this->internal_state != FieldCollectionParserState::INVALID) {
+    switch (this->internal_state) {
+      case FieldCollectionParserState::READING_FIELD_NAME: {
         if (!this->field_name_parser.has_value() && !tchar.contains(span[pos])) {
-          this->state = State::DONE;
+          this->internal_state = FieldCollectionParserState::DONE;
           break;
         }
 
@@ -21,7 +21,7 @@ FieldCollectionParser::FeedResult FieldCollectionParser::feed(std::span<const st
 
         switch (status) {
           case FeedState::NEED_MORE_INPUT: {
-            return {this->status, span.last(0)};
+            return {FeedState::NEED_MORE_INPUT, span.size()};
           }
 
           case FeedState::COMPLETE: {
@@ -31,17 +31,17 @@ FieldCollectionParser::FeedResult FieldCollectionParser::feed(std::span<const st
             pos += consumed;
             // TokenParser must see a non-tchar to end a token, so pos + consumed < span.size()
             if (span[pos] != std::byte{':'}) {
-              this->state = State::INVALID;
+              this->internal_state = FieldCollectionParserState::INVALID;
               break;
             }
 
             ++pos;
-            this->state = State::READING_OWS_BEFORE_FIELD_VALUE;
+            this->internal_state = FieldCollectionParserState::READING_OWS_BEFORE_FIELD_VALUE;
             break;
           }
 
           case FeedState::ERROR: {
-            this->status = Status::INVALID;
+            this->internal_state = FieldCollectionParserState::INVALID;
             break;
           }
         }
@@ -49,20 +49,20 @@ FieldCollectionParser::FeedResult FieldCollectionParser::feed(std::span<const st
         break;
       }
 
-      case State::READING_OWS_BEFORE_FIELD_VALUE: {
+      case FieldCollectionParserState::READING_OWS_BEFORE_FIELD_VALUE: {
         while (pos < span.size() && WSP.contains(span[pos])) {
           ++pos;
         }
 
         if (pos == span.size()) {
-          return {this->status, span.last(0)};
+          return {FeedState::NEED_MORE_INPUT, span.size()};
         }
 
-        this->state = State::READING_FIELD_VALUE;
+        this->internal_state = FieldCollectionParserState::READING_FIELD_VALUE;
         break;
       }
 
-      case State::READING_FIELD_VALUE: {
+      case FieldCollectionParserState::READING_FIELD_VALUE: {
         // field-value    = *field-content
         // field-content  = field-vchar
         //                 [ 1*( SP / HTAB / field-vchar ) field-vchar ]
@@ -77,11 +77,11 @@ FieldCollectionParser::FeedResult FieldCollectionParser::feed(std::span<const st
         }
 
         if (pos == span.size()) {
-          return {this->status, span.last(0)};
+          return {FeedState::NEED_MORE_INPUT, span.size()};
         }
 
         if (c != std::byte{'\r'}) {
-          this->state = State::INVALID;
+          this->internal_state = FieldCollectionParserState::INVALID;
           break;
         }
 
@@ -93,14 +93,14 @@ FieldCollectionParser::FeedResult FieldCollectionParser::feed(std::span<const st
         this->field_value.erase(rit.base(), this->field_value.cend());
 
         ++pos;
-        this->state = State::READING_FIELD_LINE_LF;
+        this->internal_state = FieldCollectionParserState::READING_FIELD_LINE_LF;
         break;
       }
 
-      case State::READING_FIELD_LINE_LF: {
+      case FieldCollectionParserState::READING_FIELD_LINE_LF: {
         if (span[pos] != std::byte{'\n'}) {
           // No LF found at the iterator position
-          this->state = State::INVALID;
+          this->internal_state = FieldCollectionParserState::INVALID;
           break;
         }
 
@@ -109,23 +109,20 @@ FieldCollectionParser::FeedResult FieldCollectionParser::feed(std::span<const st
         this->field_value.clear();
 
         ++pos;
-        this->state = State::READING_FIELD_NAME;
-        break;
-      }
-
-      case State::INVALID: {
-        this->status = Status::INVALID;
-        break;
-      }
-
-      case State::DONE: {
-        this->status = Status::DONE;
+        this->internal_state = FieldCollectionParserState::READING_FIELD_NAME;
         break;
       }
     }
   }
 
-  return {this->status, span.subspan(pos)};
+  return {this->state(), pos};
+}
+
+FeedState FieldCollectionParser::state() const {
+  return
+    this->internal_state == FieldCollectionParserState::DONE ? FeedState::COMPLETE :
+    this->internal_state == FieldCollectionParserState::INVALID ? FeedState::ERROR :
+    FeedState::NEED_MORE_INPUT;
 }
 
 FieldCollection & FieldCollectionParser::value() {

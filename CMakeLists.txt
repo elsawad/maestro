@@ -29,7 +29,6 @@ target_sources(maestro
     src/Options.cc
     src/QuotedStringParser.cc
     src/Server.cc
-    src/StreamProcessor.cc
     src/TokenParser.cc
 )
 

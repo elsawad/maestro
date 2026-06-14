@@ -12,9 +12,11 @@
 class FieldCollectionParser: public StreamProcessor {
   public:
     FeedResult feed(std::span<const std::byte> span) override;
+    FeedState state() const override;
     FieldCollection & value();
+
   private:
-    enum class State {
+    enum class FieldCollectionParserState {
       READING_FIELD_NAME,
       READING_OWS_BEFORE_FIELD_VALUE,
       READING_FIELD_VALUE,
@@ -23,7 +25,7 @@ class FieldCollectionParser: public StreamProcessor {
       INVALID
     };
 
-    State state = State::READING_FIELD_NAME;
+    FieldCollectionParserState internal_state = FieldCollectionParserState::READING_FIELD_NAME;
 
     std::optional<TokenParser> field_name_parser;
 
