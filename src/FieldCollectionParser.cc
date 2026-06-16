@@ -3,12 +3,12 @@
 
 const CharacterClass field_vchar{{0x21, 0x7E}, {0x80, 0xFF}}; // VCHAR / obs-text
 
-FeedResult FieldCollectionParser::feed(std::span<const std::byte> span) {
+std::size_t FieldCollectionParser::feed(ByteView bv) {
   std::size_t pos{0};
-  while (pos < span.size() && this->internal_state != FieldCollectionParserState::DONE && this->internal_state != FieldCollectionParserState::INVALID) {
+  while (pos < bv.size() && this->internal_state != FieldCollectionParserState::DONE && this->internal_state != FieldCollectionParserState::INVALID) {
     switch (this->internal_state) {
       case FieldCollectionParserState::READING_FIELD_NAME: {
-        if (!this->field_name_parser.has_value() && !tchar.contains(span[pos])) {
+        if (!this->field_name_parser.has_value() && !tchar.contains(bv[pos])) {
           this->internal_state = FieldCollectionParserState::DONE;
           break;
         }
@@ -17,11 +17,11 @@ FeedResult FieldCollectionParser::feed(std::span<const std::byte> span) {
           this->field_name_parser.emplace();
         }
 
-        const auto [status, consumed] = this->field_name_parser->feed(span.subspan(pos));
+        const std::size_t consumed = this->field_name_parser->feed(bv.subspan(pos));
 
-        switch (status) {
+        switch (this->field_name_parser->state()) {
           case FeedState::NEED_MORE_INPUT: {
-            return {FeedState::NEED_MORE_INPUT, span.size()};
+            return bv.size();
           }
 
           case FeedState::COMPLETE: {
@@ -30,7 +30,7 @@ FeedResult FieldCollectionParser::feed(std::span<const std::byte> span) {
 
             pos += consumed;
             // TokenParser must see a non-tchar to end a token, so pos + consumed < span.size()
-            if (span[pos] != std::byte{':'}) {
+            if (bv[pos] != std::byte{':'}) {
               this->internal_state = FieldCollectionParserState::INVALID;
               break;
             }
@@ -50,12 +50,12 @@ FeedResult FieldCollectionParser::feed(std::span<const std::byte> span) {
       }
 
       case FieldCollectionParserState::READING_OWS_BEFORE_FIELD_VALUE: {
-        while (pos < span.size() && WSP.contains(span[pos])) {
+        while (pos < bv.size() && WSP.contains(bv[pos])) {
           ++pos;
         }
 
-        if (pos == span.size()) {
-          return {FeedState::NEED_MORE_INPUT, span.size()};
+        if (pos == bv.size()) {
+          return pos;
         }
 
         this->internal_state = FieldCollectionParserState::READING_FIELD_VALUE;
@@ -71,13 +71,13 @@ FeedResult FieldCollectionParser::feed(std::span<const std::byte> span) {
 
         // For simplicity, we will look for any character that is not in field-vchar or WSP.
         std::byte c;
-        while (pos < span.size() && (field_vchar.contains(c = span[pos]) || WSP.contains(c))) {
+        while (pos < bv.size() && (field_vchar.contains(c = bv[pos]) || WSP.contains(c))) {
           this->field_value.push_back(static_cast<char>(c));
           ++pos;
         }
 
-        if (pos == span.size()) {
-          return {FeedState::NEED_MORE_INPUT, span.size()};
+        if (pos == bv.size()) {
+          return pos;
         }
 
         if (c != std::byte{'\r'}) {
@@ -98,7 +98,7 @@ FeedResult FieldCollectionParser::feed(std::span<const std::byte> span) {
       }
 
       case FieldCollectionParserState::READING_FIELD_LINE_LF: {
-        if (span[pos] != std::byte{'\n'}) {
+        if (bv[pos] != std::byte{'\n'}) {
           // No LF found at the iterator position
           this->internal_state = FieldCollectionParserState::INVALID;
           break;
@@ -115,14 +115,15 @@ FeedResult FieldCollectionParser::feed(std::span<const std::byte> span) {
     }
   }
 
-  return {this->state(), pos};
+  return pos;
 }
 
 FeedState FieldCollectionParser::state() const {
-  return
-    this->internal_state == FieldCollectionParserState::DONE ? FeedState::COMPLETE :
-    this->internal_state == FieldCollectionParserState::INVALID ? FeedState::ERROR :
-    FeedState::NEED_MORE_INPUT;
+  switch (this->internal_state) {
+    case FieldCollectionParserState::DONE: return FeedState::COMPLETE;
+    case FieldCollectionParserState::INVALID: return FeedState::ERROR;
+    default: return FeedState::NEED_MORE_INPUT;
+  }
 }
 
 FieldCollection & FieldCollectionParser::value() {

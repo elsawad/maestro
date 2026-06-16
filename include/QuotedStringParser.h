@@ -5,11 +5,12 @@
 #include <span>
 #include <string>
 
-#include "FeedResult.h"
+#include "IncrementalConsumer.h"
 
 class QuotedStringParser {
   public:
-    FeedResult feed(std::span<const std::byte> span);
+    std::size_t feed(ByteView bv);
+    FeedState state() const;
     std::optional<std::string> value() const;
 
   private:
@@ -20,8 +21,10 @@ class QuotedStringParser {
       DONE,
       INVALID
     };
-    QuotedStringParserState state{QuotedStringParserState::READING_OPENING_QUOTE};
+    QuotedStringParserState internal_state{QuotedStringParserState::READING_OPENING_QUOTE};
     std::string str;
 };
+
+static_assert(IncrementalConsumer<QuotedStringParser>);
 
 #endif

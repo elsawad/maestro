@@ -6,13 +6,13 @@
 #include <vector>
 
 #include "FieldCollection.h"
-#include "StreamProcessor.h"
+#include "IncrementalConsumer.h"
 #include "TokenParser.h"
 
-class FieldCollectionParser: public StreamProcessor {
+class FieldCollectionParser {
   public:
-    FeedResult feed(std::span<const std::byte> span) override;
-    FeedState state() const override;
+    std::size_t feed(ByteView);
+    FeedState state() const;
     FieldCollection & value();
 
   private:
@@ -25,7 +25,7 @@ class FieldCollectionParser: public StreamProcessor {
       INVALID
     };
 
-    FieldCollectionParserState internal_state = FieldCollectionParserState::READING_FIELD_NAME;
+    FieldCollectionParserState internal_state{FieldCollectionParserState::READING_FIELD_NAME};
 
     std::optional<TokenParser> field_name_parser;
 
@@ -34,5 +34,7 @@ class FieldCollectionParser: public StreamProcessor {
 
     FieldCollection field_collection;
 };
+
+static_assert(IncrementalConsumer<FieldCollectionParser>);
 
 #endif

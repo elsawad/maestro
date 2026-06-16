@@ -9,14 +9,14 @@
 #include "Chunk.h"
 #include "FieldCollection.h"
 #include "FieldCollectionParser.h"
+#include "IncrementalConsumer.h"
 #include "QuotedStringParser.h"
-#include "StreamProcessor.h"
 #include "TokenParser.h"
 
-class ChunkedDecoder: public StreamProcessor {
+class ChunkedDecoder {
   public:
-    FeedResult feed(std::span<const std::byte> span) override;
-    FeedState state() const override;
+    std::size_t feed(ByteView);
+    FeedState state() const;
 
     struct Handler {
       virtual ~Handler() = default;
@@ -50,7 +50,7 @@ class ChunkedDecoder: public StreamProcessor {
       DONE,
       INVALID
     };
-    ChunkedDecoderState internal_state = ChunkedDecoderState::READING_CHUNK_SIZE;
+    ChunkedDecoderState internal_state{ChunkedDecoderState::READING_CHUNK_SIZE};
 
     static Handler default_handler;
     Handler * handler{&default_handler};
@@ -59,12 +59,14 @@ class ChunkedDecoder: public StreamProcessor {
     bool is_last_chunk{false};
 
     std::vector<std::byte> buffer;
-    std::size_t remaining_chunk_size = 0;
+    std::size_t remaining_chunk_size{0};
 
     std::optional<TokenParser> chunk_ext_name_parser;
     std::optional<std::variant<TokenParser, QuotedStringParser>> chunk_ext_val_parser;
 
     std::optional<FieldCollectionParser> field_collection_parser;
 };
+
+static_assert(IncrementalConsumer<ChunkedDecoder>);
 
 #endif

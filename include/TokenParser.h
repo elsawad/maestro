@@ -6,13 +6,14 @@
 #include <string>
 
 #include "CharacterClass.h"
-#include "FeedResult.h"
+#include "IncrementalConsumer.h"
 
 extern const CharacterClass tchar;
 
 class TokenParser {
   public:
-    FeedResult feed(std::span<const std::byte> span);
+    std::size_t feed(ByteView bv);
+    FeedState state() const;
     std::optional<std::string> value() const;
 
   private:
@@ -22,8 +23,10 @@ class TokenParser {
       INVALID
     };
 
-    TokenParserState state{TokenParserState::READING_TOKEN};
+    TokenParserState internal_state{TokenParserState::READING_TOKEN};
     std::string token;
 };
+
+static_assert(IncrementalConsumer<TokenParser>);
 
 #endif

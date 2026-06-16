@@ -4,66 +4,70 @@
 const CharacterClass qdtext{{'\t', '\t'}, {' ', ' '}, {0x21, 0x21}, {0x23, 0x5b}, {0x5d, 0x7e}, {0x80, 0xff}};
 const CharacterClass quoted_pair_chars{{'\t', '\t'}, {' ', ' '}, {0x21, 0x7e}, {0x80, 0xff}};
 
-FeedResult QuotedStringParser::feed(std::span<const std::byte> span) {
-  if (this->state == QuotedStringParserState::DONE || this->state == QuotedStringParserState::INVALID) {
-    return {this->state == QuotedStringParserState::DONE ? FeedState::COMPLETE : FeedState::ERROR, 0};
+std::size_t QuotedStringParser::feed(ByteView bv) {
+  if (this->internal_state == QuotedStringParserState::DONE || this->internal_state == QuotedStringParserState::INVALID) {
+    return 0;
   }
 
   std::size_t i{0};
-  while (i < span.size() && this->state != QuotedStringParserState::DONE) {
-    switch (this->state) {
+  while (i < bv.size() && this->internal_state != QuotedStringParserState::DONE && this->internal_state != QuotedStringParserState::INVALID) {
+    switch (this->internal_state) {
       case QuotedStringParserState::READING_OPENING_QUOTE: {
-        if (span[i] != std::byte{'"'}) {
-          this->state = QuotedStringParserState::INVALID;
-          return {FeedState::ERROR, i};
+        if (bv[i] != std::byte{'"'}) {
+          this->internal_state = QuotedStringParserState::INVALID;
+          return i;
         }
 
-        this->state =QuotedStringParserState::READING_QDTEXT;
+        this->internal_state = QuotedStringParserState::READING_QDTEXT;
         ++i;
         break;
       }
 
       case QuotedStringParserState::READING_QDTEXT: {
-        if (span[i] == std::byte{'\\'}) {
+        if (bv[i] == std::byte{'\\'}) {
           ++i;
-          this->state = QuotedStringParserState::READING_QUOTED_PAIR_CHAR;
-        } else if (span[i] == std::byte{'"'}) {
+          this->internal_state = QuotedStringParserState::READING_QUOTED_PAIR_CHAR;
+        } else if (bv[i] == std::byte{'"'}) {
           ++i;
-          this->state = QuotedStringParserState::DONE;
-        } else if (qdtext.contains(span[i])) {
-          this->str.push_back(static_cast<char>(span[i]));
+          this->internal_state = QuotedStringParserState::DONE;
+        } else if (qdtext.contains(bv[i])) {
+          this->str.push_back(static_cast<char>(bv[i]));
           ++i;
         } else {
-          this->state = QuotedStringParserState::INVALID;
-          return {FeedState::ERROR, i};
+          this->internal_state = QuotedStringParserState::INVALID;
+          return i;
         }
         break;
       }
 
       case QuotedStringParserState::READING_QUOTED_PAIR_CHAR: {
-        if (!quoted_pair_chars.contains(span[i])) {
-          this->state = QuotedStringParserState::INVALID;
-          return {FeedState::ERROR, i};
+        if (!quoted_pair_chars.contains(bv[i])) {
+          this->internal_state = QuotedStringParserState::INVALID;
+          return i;
         }
 
-        this->str.push_back(static_cast<char>(span[i]));
+        this->str.push_back(static_cast<char>(bv[i]));
         ++i;
 
-        this->state = QuotedStringParserState::READING_QDTEXT;
+        this->internal_state = QuotedStringParserState::READING_QDTEXT;
         break;
       }
     }
   }
 
-  if (this->state == QuotedStringParserState::DONE) {
-    return {FeedState::COMPLETE, i};
-  }
+  return i;
+}
 
-  return {FeedState::NEED_MORE_INPUT, i};
+FeedState QuotedStringParser::state() const {
+  switch (this->internal_state) {
+    case QuotedStringParserState::DONE: return FeedState::COMPLETE;
+    case QuotedStringParserState::INVALID: return FeedState::ERROR;
+    default: return FeedState::NEED_MORE_INPUT;
+  }
 }
 
 std::optional<std::string> QuotedStringParser::value() const {
-  if (this->state == QuotedStringParserState::DONE) {
+  if (this->internal_state == QuotedStringParserState::DONE) {
     return std::optional<std::string>{this->str};
   }
   return std::nullopt;
