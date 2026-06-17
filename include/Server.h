@@ -1,20 +1,18 @@
 #ifndef SERVER_H
 #define SERVER_H
 
-#include <filesystem>
 #include <netinet/in.h>
-#include <string>
 
-class Options;
+#include "ServerConfig.h"
 
 class Server {
   private:
-    const std::filesystem::path root;
+    ServerConfig config;
     sockaddr_in addr;
     int sockfd;
     int epfd;
   public:
-    Server(Options const &options);
+    Server(const ServerConfig & config);
     ~Server();
     uint16_t getPort() const;
     void serve();

@@ -12,10 +12,9 @@
 
 #include "HTTPRequest.h"
 #include "HTTPResponse.h"
-#include "Options.h"
 #include "Server.h"
 
-Server::Server(Options const &options): root(options.getRoot()) {
+Server::Server(const ServerConfig & config): config(config) {
   // Create accepting socket
   int sockfd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
   if (sockfd == -1) {
@@ -34,7 +33,7 @@ Server::Server(Options const &options): root(options.getRoot()) {
   // this->epfd = epfd;
 
   this->addr.sin_family = AF_INET;
-  this->addr.sin_port = htons(options.getPort());
+  this->addr.sin_port = htons(this->config.port);
   this->addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
   int bindStatus = bind(sockfd, (sockaddr *)&(this->addr), sizeof(this->addr));

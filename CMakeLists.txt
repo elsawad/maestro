@@ -3,8 +3,7 @@ cmake_minimum_required(VERSION 3.28)
 project(maestro)
 
 # GoogleTest requires at least C++17
-# Using C++20 for std::span
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(maestro)
@@ -26,9 +25,11 @@ target_sources(maestro
     src/HTTPMessageHeaders.cc
     src/HTTPRequest.cc
     src/HTTPResponse.cc
-    src/Options.cc
     src/QuotedStringParser.cc
     src/Server.cc
+    src/ServerConfig.cc
+    src/ServerConfigBuilder.cc
+    src/ServerConfigCLIParser.cc
     src/TokenParser.cc
 )
 
@@ -40,3 +41,4 @@ target_include_directories(maestro
 enable_testing()
 
 add_subdirectory(tests)
+add_subdirectory(examples)

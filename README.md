@@ -9,7 +9,7 @@ including a hand-rolled standards-compliant HTTP parser and handler.
 
 ## Requirements
 
-- A C++ compiler
+- A C++23+ compiler
 - [CMake](https://cmake.org/)
 - [GoogleTest](https://github.com/google/googletest) (installed automatically when building for the first time)
 
