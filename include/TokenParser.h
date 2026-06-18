@@ -2,7 +2,6 @@
 #define TOKEN_PARSER_H
 
 #include <optional>
-#include <span>
 #include <string>
 
 #include "CharacterClass.h"

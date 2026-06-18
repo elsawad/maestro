@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -174,7 +173,7 @@ std::size_t ChunkedDecoder::feed(ByteView bv) {
           return parser.feed(bv.subspan(pos));
         }, *this->chunk_ext_val_parser)};
 
-        const FeedState chunk_ext_val_parser_state{std::visit([bv, pos](auto & parser) {
+        const FeedState chunk_ext_val_parser_state{std::visit([](auto & parser) {
           return parser.state();
         }, *this->chunk_ext_val_parser)};
 

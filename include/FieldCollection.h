@@ -1,7 +1,6 @@
 #ifndef FIELD_COLLECTION_H
 #define FIELD_COLLECTION_H
 
-#include <optional>
 #include <string>
 #include <vector>
 

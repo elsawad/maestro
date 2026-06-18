@@ -2,7 +2,6 @@
 #define QUOTED_STRING_PARSER_H
 
 #include <optional>
-#include <span>
 #include <string>
 
 #include "IncrementalConsumer.h"

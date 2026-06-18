@@ -1,13 +1,10 @@
 #ifndef CHUNKED_DECODER_H
 #define CHUNKED_DECODER_H
 
-#include <cstdint>
-#include <list>
 #include <variant>
 #include <vector>
 
 #include "Chunk.h"
-#include "FieldCollection.h"
 #include "FieldCollectionParser.h"
 #include "IncrementalConsumer.h"
 #include "QuotedStringParser.h"
@@ -15,7 +12,7 @@
 
 class ChunkedDecoder {
   public:
-    std::size_t feed(ByteView);
+    std::size_t feed(ByteView bv);
     FeedState state() const;
 
     struct Handler {

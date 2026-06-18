@@ -1,7 +1,6 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <iostream>
-#include <memory>
 #include <netinet/in.h>
 #include <sstream>
 #include <stdexcept>

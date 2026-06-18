@@ -1,10 +1,6 @@
 #ifndef FIELD_COLLECTION_PARSER_H
 #define FIELD_COLLECTION_PARSER_H
 
-#include <cstdint>
-#include <span>
-#include <vector>
-
 #include "FieldCollection.h"
 #include "IncrementalConsumer.h"
 #include "TokenParser.h"
